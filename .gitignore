@@ -5,3 +5,12 @@
 *.la
 *.o
 *.so
+lib/libev/config.h
+lib/libev/config.log
+lib/libev/config.status
+lib/libev/ev.3
+lib/libev/libtool
+lib/libev/Makefile
+lib/libev/stamp-h1
+lib/libev/.deps/ev.Plo
+lib/libev/.deps/event.Plo

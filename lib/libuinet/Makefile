@@ -15,10 +15,10 @@ include ${TOPDIR}/cflags.mk
 
 DEBUG=${DEBUG_FLAGS}
 
-KERNPREINCLUDES:= ${INCLUDES}
-INCLUDES= -I${OVERRIDE_INCLUDES_ROOT} -I${API_INCLUDES_ROOT} ${KERNPREINCLUDES}
 INCLUDES+= -I./machine_include
 INCLUDES+= -I./opt
+KERNPREINCLUDES:= ${INCLUDES}
+INCLUDES= -I${OVERRIDE_INCLUDES_ROOT} -I${API_INCLUDES_ROOT} ${KERNPREINCLUDES}
 
 # Include search path for files that only include host OS headers
 HOST_INCLUDES= -I. -I${API_INCLUDES_ROOT} -I../libuinetnv
@@ -172,11 +172,14 @@ endif
 
 UINET_HOST_SRCS+=		\
 	uinet_api_errno.c	\
-	uinet_host_interface.c	\	
+	uinet_host_interface.c	\
 	uinet_kern_shutdown.c	\
 	uinet_host_sysctl_api.c
 
-# UINET_HOST_SRCS+=uinet_if_pcap_host.c
+
+ifdef PCAP_INCLUDE
+UINET_HOST_SRCS+=uinet_if_pcap_host.c
+endif
 
 ifneq (${HOST_OS},Darwin)
 UINET_HOST_SRCS+= uinet_if_netmap_host.c

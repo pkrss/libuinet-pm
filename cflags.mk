@@ -2,7 +2,11 @@ HOST_OS:=$(shell uname -s)
 
 DEBUG_FLAGS	?= -O -gdwarf-2
 
-UINET_DESTDIR	?= /usr/local/
+UINET_DESTDIR	?= $(UINET_DESTDIR)
+
+ifeq (UINET_DESTDIR,"")
+	UINET_DESTDIR = /usr/local/
+endif
 
 UINET_INSTALL	?= install
 UINET_INSTALL_DIR ?= $(UINET_INSTALL) -m 0755

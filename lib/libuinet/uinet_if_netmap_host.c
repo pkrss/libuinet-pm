@@ -67,8 +67,8 @@
 #endif
 #endif /* __linux__ */
 
-#include <net/netmap.h>
-#include <net/netmap_user.h>
+#include "../../sys/net/netmap.h"
+#include "../../sys/net/netmap_user.h"
 
 #include "uinet_if_netmap_host.h"
 #include "uinet_host_interface.h"

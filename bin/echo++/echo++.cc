@@ -450,7 +450,7 @@ int main (int argc, char **argv)
 	}
 	
 	
-	uinet_init(1, 128*1024, 0);
+	uinet_init(NULL, NULL); // 1, 128*1024, 0);
 	uinet_install_sighandlers();
 
 	for (i = 0; i < num_interfaces; i++) {

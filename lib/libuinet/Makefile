@@ -172,10 +172,11 @@ endif
 
 UINET_HOST_SRCS+=		\
 	uinet_api_errno.c	\
-	uinet_host_interface.c	\
-	uinet_if_pcap_host.c	\
+	uinet_host_interface.c	\	
 	uinet_kern_shutdown.c	\
 	uinet_host_sysctl_api.c
+
+# UINET_HOST_SRCS+=uinet_if_pcap_host.c
 
 ifneq (${HOST_OS},Darwin)
 UINET_HOST_SRCS+= uinet_if_netmap_host.c

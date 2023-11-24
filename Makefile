@@ -1,5 +1,5 @@
 
-SUBDIRS=lib bin
+SUBDIRS=lib # bin
 
 easy_start: config all
 

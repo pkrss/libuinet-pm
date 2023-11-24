@@ -198,9 +198,9 @@ static int proto_reg[] = {-1, -1};
 } while (0)
 
 static void	carp_hmac_prepare(struct carp_softc *);
-static void	carp_hmac_generate(struct carp_softc *, u_int32_t *,
+static void	carp_hmac_generate(struct carp_softc *, u_int32_t [2],
 		    unsigned char *);
-static int	carp_hmac_verify(struct carp_softc *, u_int32_t *,
+static int	carp_hmac_verify(struct carp_softc *, u_int32_t [2],
 		    unsigned char *);
 static void	carp_setroute(struct carp_softc *, int);
 static void	carp_input_c(struct mbuf *, struct carp_header *, sa_family_t);
@@ -340,7 +340,7 @@ carp_hmac_prepare(struct carp_softc *sc)
 
 static void
 carp_hmac_generate(struct carp_softc *sc, u_int32_t counter[2],
-    unsigned char md[20])
+    unsigned char* md)
 {
 	SHA1_CTX sha1ctx;
 
@@ -359,7 +359,7 @@ carp_hmac_generate(struct carp_softc *sc, u_int32_t counter[2],
 
 static int
 carp_hmac_verify(struct carp_softc *sc, u_int32_t counter[2],
-    unsigned char md[20])
+    unsigned char* md)
 {
 	unsigned char md2[20];
 
@@ -760,7 +760,8 @@ carp_input_c(struct mbuf *m, struct carp_header *ch, sa_family_t af)
 	}
 
 	/* verify the hash */
-	if (carp_hmac_verify(sc, ch->carp_counter, ch->carp_md)) {
+	u_int32_t	carp_counter[2] = {ch->carp_counter[0],ch->carp_counter[1]};
+	if (carp_hmac_verify(sc, carp_counter, ch->carp_md)) {
 		CARPSTATS_INC(carps_badauth);
 		SC2IFP(sc)->if_ierrors++;
 		CARP_UNLOCK(ifp->if_carp);
@@ -864,7 +865,10 @@ carp_prepare_ad(struct mbuf *m, struct carp_softc *sc, struct carp_header *ch)
 	ch->carp_counter[0] = htonl((sc->sc_counter>>32)&0xffffffff);
 	ch->carp_counter[1] = htonl(sc->sc_counter&0xffffffff);
 
-	carp_hmac_generate(sc, ch->carp_counter, ch->carp_md);
+	u_int32_t	carp_counter[2] = {ch->carp_counter[0],ch->carp_counter[1]};
+	carp_hmac_generate(sc, carp_counter, ch->carp_md);
+	ch->carp_counter[0] = carp_counter[0];
+	ch->carp_counter[1] = carp_counter[1];
 
 	/* Tag packet for carp_output */
 	mtag = m_tag_get(PACKET_TAG_CARP, sizeof(struct ifnet *), M_NOWAIT);

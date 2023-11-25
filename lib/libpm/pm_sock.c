@@ -15,6 +15,13 @@ struct pm_socket {
     struct pm_instance* inst;
     struct uinet_socket* aso;
     int fd;
+    
+    unsigned int tp_rblock_num;
+    unsigned int tp_wblock_num;
+    struct iovec* tp_rd;
+    struct iovec* tp_wd;
+    uint8_t* tp_map;
+    size_t tp_map_size;
 };
 
 int pm_init(struct pm_instance** out, struct pm_params* p) {
@@ -65,9 +72,6 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
 	uinet_init(&cfg, NULL);
     inst->uinst = uinet_instance_create(&cfg);
 
-    if((p->tpacket_version != 1) && (p->tpacket_version != 2))
-        p->tpacket_version = 3; // TPACKET_V3
-
     if(!p->mm_alloc) // call p->mm_alloc() easy
         p->mm_alloc = malloc;
     if(!p->mm_free)
@@ -75,7 +79,16 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
 
     if(!p->mtu)
         p->mtu = 1500;
-        
+
+    if(!p->tp_block_size)
+        p->tp_block_size = 40960;
+    if(!p->tp_frame_size)
+        p->tp_frame_size = (p->mtu / 1024 + 1) * 1024; // 2048        
+    if(!p->tp_block_num)
+        p->tp_block_num = 2;  
+    if(!p->tp_w_block_num)
+        p->tp_w_block_num = 1;
+
     *out = inst;
     return 0;
 failed:
@@ -89,8 +102,10 @@ void pm_destroy(struct pm_instance* v){
 
 int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, int type, int proto){
     int res;
+    unsigned int i;
     struct sockaddr_ll my_addr;
-    struct ifreq s_ifr;
+    struct ifreq s_ifr;    
+    struct tpacket_req3 req;
     struct pm_socket* sck = (struct pm_socket*)inst->params.mm_alloc(sizeof(struct pm_socket));
     memset(sck, 0, sizeof(struct pm_socket));
     sck->inst = inst;
@@ -114,6 +129,18 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
         goto failed;
     if((sck->fd = socket(AF_PACKET, SOCK_RAW|SOCK_NONBLOCK, htons(ETH_P_ALL))) == -1)
         goto failed;
+
+    res = TPACKET_V3;
+    if(inst->params.tpacket_version == 1)
+        res = TPACKET_V1;
+    else if(inst->params.tpacket_version == 2)
+        res = TPACKET_V2;
+    if (setsockopt(fd, SOL_PACKET, PACKET_VERSION, &res, sizeof(res)) < 0)
+        goto failed;
+
+    // res = (1<<6); // SOF_TIMESTAMPING_RAW_HARDWARE = (1<<6), TP_STATUS_TS_RAW_HARDWARE|TP_STATUS_TS_SOFTWARE;
+    // if(setsockopt(fd, SOL_PACKET, PACKET_TIMESTAMP, (void *)&res, sizeof(v)) < 0)
+    //     goto failed;
     
     memset(&s_ifr, 0, sizeof(struct ifreq));
     // initialize interface struct
@@ -137,58 +164,84 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
 
     // bind port
     if (bind(sck->fd, (struct sockaddr *)&my_addr, sizeof(struct sockaddr_ll)) == -1)
-    {
-        perror("bind");
-        return EXIT_FAILURE;
-    }
+        goto failed;
 
-    // prepare Tx ring request
-    s_packet_req.tp_block_size = c_buffer_sz;
-    s_packet_req.tp_frame_size = c_buffer_sz;
-    s_packet_req.tp_block_nr = c_buffer_nb;
-    s_packet_req.tp_frame_nr = c_buffer_nb;
+    // prepare Tx / Rx ring request
+    memset(&req, 0, sizeof(tpacket_req3));
+    req.tp_block_size = inst->params.tp_block_size;
+    req.tp_frame_size = inst->params.tp_frame_size;
+    req.tp_block_nr = inst->params.tp_block_num;
+    req.tp_frame_nr = (inst->params.tp_block_size * inst->params.tp_block_num) / inst->params.tp_frame_size;
+    req.tp_retire_blk_tov = 60;
+    req.tp_feature_req_word = TP_FT_REQ_FILL_RXHASH;
+    if (setsockopt(fd, SOL_PACKET, PACKET_RX_RING, &req, sizeof(tpacket_req3)) < 0)
+        goto failed;
 
-    // calculate memory to mmap in the kernel
-    size = s_packet_req.tp_block_size * s_packet_req.tp_block_nr;
+    req.tp_retire_blk_tov = 0;
+    req.tp_feature_req_word = 0;
+    req.tp_block_nr = inst->params.tp_w_block_num;
+    if (setsockopt(fd, SOL_PACKET, PACKET_TX_RING, &req, sizeof(tpacket_req3)) < 0)
+        goto failed;
 
     // set packet loss option
-    tmp = mode_loss;
-    if (setsockopt(sck->fd, SOL_PACKET, PACKET_LOSS, (char *)&tmp, sizeof(tmp))<0)
-    {
-        perror("setsockopt: PACKET_LOSS");
-        return EXIT_FAILURE;
+    if((inst->params.tpacket_version == 1) || (inst->params.tpacket_version == 2)){
+        res = 0;
+        if (setsockopt(sck->fd, SOL_PACKET, PACKET_LOSS, (char *)&res, sizeof(res))<0)
+            goto failed;
     }
 
     // send TX ring request
     if (setsockopt(sck->fd, SOL_PACKET, PACKET_TX_RING, (char *)&s_packet_req, sizeof(s_packet_req))<0)
-    {
-        perror("setsockopt: PACKET_TX_RING");
-        return EXIT_FAILURE;
-    }
+        goto failed;
 
     // change send buffer size
-    if(c_sndbuf_sz) {
-        printf("send buff size = %d\n", c_sndbuf_sz);
-        if (setsockopt(sck->fd, SOL_SOCKET, SO_SNDBUF, &c_sndbuf_sz, sizeof(c_sndbuf_sz))< 0)
-        {
-            perror("getsockopt: SO_SNDBUF");
-            return EXIT_FAILURE;
-        }
+    // res = inst->params.tp_block_size * inst->params.tp_block_num;
+    // if (setsockopt(sck->fd, SOL_SOCKET, SO_SNDBUF, (char *)&res, sizeof(res))<0)
+    //     goto failed;
+
+    // mmap memory in the kernel, send buffers after recv buffers
+    sck->tp_map_size = req.tp_block_size * req.tp_block_nr + inst->params.tp_w_block_num;
+    if ((sck->tp_map = (uint8_t*)mmap(NULL, sck->tp_map_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_LOCKED, sck->fd, 0)) == MAP_FAILED) 
+        goto failed;
+
+    sck->tp_rd = (struct iovec*)so->inst.params.mm_alloc(req.tp_block_nr * sizeof(struct iovec));
+    for (i = 0; i < req.tp_block_nr; ++i) {
+        sck->tp_rd[i].iov_base = sck->tp_map + (i * req.tp_block_size);
+        sck->tp_rd[i].iov_len = req.tp_block_size;
     }
 
-    // get data offset
-    data_offset = TPACKET_HDRLEN - sizeof(struct sockaddr_ll);
-
-    // mmap Tx ring buffers memory
-    ps_header_start = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED, sck->fd, 0);
-    if (ps_header_start == (void*)-1)
-    {
-        perror("mmap");
-        return EXIT_FAILURE;
+    sck->tp_wd = (struct iovec*)so->inst.params.mm_alloc(inst->params.tp_w_block_num * sizeof(struct iovec));
+    for (i = 0; i < inst->params.tp_w_block_num; ++i) {
+        sck->tp_wd[i].iov_base = sck->tp_map + ((i + inst->params.tp_block_nr) * req.tp_block_size);
+        sck->tp_wd[i].iov_len = req.tp_block_size;
     }
 
     *out = sck;
     return 0;
 failed:
+    res = errno;
+    if(!res)
+        res = -1;
+    if(inst->params.log_printf)
+	    inst->params.log_printf("pm_socreate failed, %d %s", res, strerror(res));
+    pm_close(sck);
     return res;
+}
+
+int pm_close(struct pm_socket *sck) {
+    if(sck->aso)
+        uinet_soclose(sck->aso);
+    if(sck->fd)
+        close(sck->fd);
+    if(sck->tp_wd)
+        sck->inst.params.mm_free(sck->tp_wd);
+    if(sck->tp_rd)
+        sck->inst.params.mm_free(sck->tp_rd);
+    if(sck->tp_map)
+        munmap(sck->tp_map, sck->tp_map_size);
+    sck->inst.params.mm_free(sck);
+}
+
+int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr){
+    return 0;
 }

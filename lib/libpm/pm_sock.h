@@ -17,6 +17,11 @@ struct pm_params {
     int mtu; // opt, default 1500
     const char* netdev; // opt, eg: "eth0"
     
+	const unsigned int tp_block_size; // defualt: 40960;
+    const unsigned int tp_frame_size; // defualt: 2048 for mtu 1500
+	const unsigned int tp_block_num; // defualt: 2
+	const unsigned int tp_w_block_num; // defualt: 2
+    
     void (*log_printf)(const char *fmt, ...); // opt, 
 
     void (*mm_alloc)(size_t n); // opt, 
@@ -35,11 +40,11 @@ void pm_destroy(struct pm_instance* v);
 
 struct pm_socket;
 int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, int type, int proto);
-void pm_shutdown(struct pm_socket* fd, int how);
-int pm_accept(struct pm_socket *listener, struct pm_sockaddr **nam, struct pm_socket **aso);
-int pm_bind(struct pm_socket *so, struct pm_sockaddr *nam);
-int pm_close(struct pm_socket *so);
-int pm_connect(struct pm_socket *so, struct pm_sockaddr *nam);
+void pm_shutdown(struct pm_socket* sck, int how);
+int pm_accept(struct pm_socket *listener, struct pm_sockaddr **adr, struct pm_socket **aso);
+int pm_bind(struct pm_socket *sck, struct pm_sockaddr *nam);
+int pm_close(struct pm_socket *sck);
+int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr);
 
 #ifdef __cplusplus
 }

@@ -14,7 +14,7 @@ struct pm_instance {
 struct pm_socket {
     struct pm_instance* inst;
     struct uinet_socket* aso;
-    struct socket* fd;
+    int fd;
 };
 
 int pm_init(struct pm_instance** out, struct pm_params* p) {
@@ -72,6 +72,9 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         p->mm_alloc = malloc;
     if(!p->mm_free)
         p->mm_free = free;
+
+    if(!p->mtu)
+        p->mtu = 1500;
         
     *out = inst;
     return 0;
@@ -84,93 +87,100 @@ void pm_destroy(struct pm_instance* v){
     (v->params.mm_free : free)(v);
 }
 
-int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int type, int proto){
-    (void)type;
-    (void)proto;
+int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, int type, int proto){
     int res;
-    struct pm_socket* sck = (struct pm_socket*)inst->params->mm_alloc(sizeof(struct pm_socket));
+    struct sockaddr_ll my_addr;
+    struct ifreq s_ifr;
+    struct pm_socket* sck = (struct pm_socket*)inst->params.mm_alloc(sizeof(struct pm_socket));
     memset(sck, 0, sizeof(struct pm_socket));
     sck->inst = inst;
-    if((res = uinet_socreate(inst->uinst, AF_PACKET, &sck->aso, SOCK_RAW|SOCK_NONBLOCK, htons(ETH_P_ALL))) != 0)
+    switch(family){
+    case PF_INET:
+        family = UINET_PF_INET;
+        break;
+    case PF_INET6:
+        family = UINET_PF_INET6;
+        break;
+    }
+    switch(type){
+    case SOCK_STREAM:
+        type = UINET_SOCK_STREAM;
+        break;
+    case SOCK_DGRAM:
+        type = UINET_SOCK_DGRAM;
+        break;
+    }
+    if((res = uinet_socreate(inst->uinst, family, &sck->aso, type, proto)) != 0)
         goto failed;
-    sck->fd = *(struct socket*)sc->aso;
+    if((sck->fd = socket(AF_PACKET, SOCK_RAW|SOCK_NONBLOCK, htons(ETH_P_ALL))) == -1)
+        goto failed;
     
-    struct sockaddr_ll my_addr;
-    memset(&my_addr, 0, sizeof(struct sockaddr_ll));
-    my_addr.sll_family = PF_PACKET;
-    my_addr.sll_protocol = htons(ETH_P_ALL);
-
+    memset(&s_ifr, 0, sizeof(struct ifreq));
     // initialize interface struct
     strcpy(s_ifr.ifr_name, inst->params.netdev);
+    s_ifr.ifr_ifindex = inst->opt.i_ifindex;
 
     // Get the broad cast address
-    if((res = ioctl(fd_socket[z], SIOCGIFINDEX, &s_ifr)) == -1)
+    if((res = ioctl(sck->fd, SIOCGIFINDEX, &s_ifr)) == -1)
         goto failed;
 
-    /* update with interface index */
-    i_ifindex = s_ifr.ifr_ifindex;
+    s_ifr.ifr_mtu = inst->params.mtu;
+    // update the mtu through ioctl
+    if((res = ioctl(sck->fd, SIOCSIFMTU, &s_ifr)) == -1)
+        goto failed;
 
-    s_ifr.ifr_mtu = 7200;
-    /* update the mtu through ioctl */
-    ec = ioctl(fd_socket[z], SIOCSIFMTU, &s_ifr);
-    if(ec == -1)
-    {
-        perror("iotcl");
-        return EXIT_FAILURE;
-    }
+    // set sockaddr info
+    memset(&my_addr, 0, sizeof(struct sockaddr_ll));
+    my_addr.sll_family = AF_PACKET;
+    my_addr.sll_protocol = ETH_P_ALL;
+    my_addr.sll_ifindex = inst->opt.i_ifindex; // update with interface index
 
-    /* set sockaddr info */
-    memset(&my_addr[z], 0, sizeof(struct sockaddr_ll));
-    my_addr[z].sll_family = AF_PACKET;
-    my_addr[z].sll_protocol = ETH_P_ALL;
-    my_addr[z].sll_ifindex = i_ifindex;
-
-    /* bind port */
-    if (bind(fd_socket[z], (struct sockaddr *)&my_addr[z], sizeof(struct sockaddr_ll)) == -1)
+    // bind port
+    if (bind(sck->fd, (struct sockaddr *)&my_addr, sizeof(struct sockaddr_ll)) == -1)
     {
         perror("bind");
         return EXIT_FAILURE;
     }
 
-    /* prepare Tx ring request */
+    // prepare Tx ring request
     s_packet_req.tp_block_size = c_buffer_sz;
     s_packet_req.tp_frame_size = c_buffer_sz;
     s_packet_req.tp_block_nr = c_buffer_nb;
     s_packet_req.tp_frame_nr = c_buffer_nb;
 
-    /* calculate memory to mmap in the kernel */
+    // calculate memory to mmap in the kernel
     size = s_packet_req.tp_block_size * s_packet_req.tp_block_nr;
 
-    /* set packet loss option */
+    // set packet loss option
     tmp = mode_loss;
-    if (setsockopt(fd_socket[z], SOL_PACKET, PACKET_LOSS, (char *)&tmp, sizeof(tmp))<0)
+    if (setsockopt(sck->fd, SOL_PACKET, PACKET_LOSS, (char *)&tmp, sizeof(tmp))<0)
     {
         perror("setsockopt: PACKET_LOSS");
         return EXIT_FAILURE;
     }
 
-    /* send TX ring request */
-    if (setsockopt(fd_socket[z], SOL_PACKET, PACKET_TX_RING, (char *)&s_packet_req, sizeof(s_packet_req))<0)
+    // send TX ring request
+    if (setsockopt(sck->fd, SOL_PACKET, PACKET_TX_RING, (char *)&s_packet_req, sizeof(s_packet_req))<0)
     {
         perror("setsockopt: PACKET_TX_RING");
         return EXIT_FAILURE;
     }
 
-    /* change send buffer size */
+    // change send buffer size
     if(c_sndbuf_sz) {
         printf("send buff size = %d\n", c_sndbuf_sz);
-        if (setsockopt(fd_socket[z], SOL_SOCKET, SO_SNDBUF, &c_sndbuf_sz, sizeof(c_sndbuf_sz))< 0)
+        if (setsockopt(sck->fd, SOL_SOCKET, SO_SNDBUF, &c_sndbuf_sz, sizeof(c_sndbuf_sz))< 0)
         {
             perror("getsockopt: SO_SNDBUF");
             return EXIT_FAILURE;
         }
     }
 
-    /* get data offset */
+    // get data offset
     data_offset = TPACKET_HDRLEN - sizeof(struct sockaddr_ll);
 
-    /* mmap Tx ring buffers memory */
-    ps_header_start = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd_socket[z], 0);
+    // mmap Tx ring buffers memory
+    ps_header_start = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED, sck->fd, 0);
     if (ps_header_start == (void*)-1)
     {
         perror("mmap");

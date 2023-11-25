@@ -190,10 +190,6 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
             goto failed;
     }
 
-    // send TX ring request
-    if (setsockopt(sck->fd, SOL_PACKET, PACKET_TX_RING, (char *)&s_packet_req, sizeof(s_packet_req))<0)
-        goto failed;
-
     // change send buffer size
     // res = inst->params.tp_block_size * inst->params.tp_block_num;
     // if (setsockopt(sck->fd, SOL_SOCKET, SO_SNDBUF, (char *)&res, sizeof(res))<0)

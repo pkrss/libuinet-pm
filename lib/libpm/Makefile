@@ -29,7 +29,7 @@ library: pm_sock.o
 	ln -sf $(SONAME) $(SONAME_GENERIC)
 
 package: pm_sock.o
-	$(AR) rcs pm_sock.a pm_sock.o
+	$(AR) rcs libpm.a pm_sock.o
 
 default: all
 

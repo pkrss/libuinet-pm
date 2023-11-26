@@ -1,6 +1,19 @@
-#include "pm_sock.h"
-#include <net/if.h> // if_nameindex()
+
+
+#include <errno.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include "pm_inc.h"
+
 #include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <linux/if_packet.h>
+#include <linux/if_ether.h>
+#include <linux/ipv6.h>
+#include <linux/tcp.h>
+#include <net/if.h> // if_nameindex()
 #include "../libuinet/api_include/uinet_api.h"
 
 struct pm_instance {
@@ -25,13 +38,12 @@ struct pm_socket {
 };
 
 int pm_init(struct pm_instance** out, struct pm_params* p) {
-    bool found;
-    struct pm_params* p;
+    int found;
     struct if_nameindex* ifni;
     struct pm_instance* inst;
 
-    inst = (struct pm_instance*)((p0 && p->mm_alloc ? p->mm_alloc : malloc)(sizeof(struct pm_instance)));
-    memset(inst, 0, sizeof(pm_instance));
+    inst = (struct pm_instance*)((p && p->mm_alloc ? p->mm_alloc : malloc)(sizeof(struct pm_instance)));
+    memset(inst, 0, sizeof(struct pm_instance));
 
     inst->params = *p;
     p = &inst->params;
@@ -50,10 +62,10 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
             ifni++;
         }
     }else{
-        found = false;
+        found = 0;
         while(ifni && ifni->if_name){
             if(0 == strcmp(p->netdev, ifni->if_name)) {
-                found = true;
+                found = 1;
                 break;
             }
             ifni++;
@@ -70,7 +82,7 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     struct uinet_global_cfg cfg;
 	uinet_default_cfg(&cfg, UINET_GLOBAL_CFG_MEDIUM);
 	uinet_init(&cfg, NULL);
-    inst->uinst = uinet_instance_create(&cfg);
+    inst->uinst = uinet_instance_create(NULL);
 
     if(!p->mm_alloc) // call p->mm_alloc() easy
         p->mm_alloc = malloc;
@@ -97,7 +109,7 @@ failed:
 }
 
 void pm_destroy(struct pm_instance* v){
-    (v->params.mm_free : free)(v);
+    (v->params.mm_free ? v->params.mm_free : free)(v);
 }
 
 int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, int type, int proto){
@@ -135,11 +147,11 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
         res = TPACKET_V1;
     else if(inst->params.tpacket_version == 2)
         res = TPACKET_V2;
-    if (setsockopt(fd, SOL_PACKET, PACKET_VERSION, &res, sizeof(res)) < 0)
+    if (setsockopt(sck->fd, SOL_PACKET, PACKET_VERSION, &res, sizeof(res)) < 0)
         goto failed;
 
     // res = (1<<6); // SOF_TIMESTAMPING_RAW_HARDWARE = (1<<6), TP_STATUS_TS_RAW_HARDWARE|TP_STATUS_TS_SOFTWARE;
-    // if(setsockopt(fd, SOL_PACKET, PACKET_TIMESTAMP, (void *)&res, sizeof(v)) < 0)
+    // if(setsockopt(sck->fd, SOL_PACKET, PACKET_TIMESTAMP, (void *)&res, sizeof(v)) < 0)
     //     goto failed;
     
     memset(&s_ifr, 0, sizeof(struct ifreq));
@@ -167,20 +179,14 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
         goto failed;
 
     // prepare Tx / Rx ring request
-    memset(&req, 0, sizeof(tpacket_req3));
+    memset(&req, 0, sizeof(struct tpacket_req3));
     req.tp_block_size = inst->params.tp_block_size;
     req.tp_frame_size = inst->params.tp_frame_size;
     req.tp_block_nr = inst->params.tp_block_num;
     req.tp_frame_nr = (inst->params.tp_block_size * inst->params.tp_block_num) / inst->params.tp_frame_size;
     req.tp_retire_blk_tov = 60;
     req.tp_feature_req_word = TP_FT_REQ_FILL_RXHASH;
-    if (setsockopt(fd, SOL_PACKET, PACKET_RX_RING, &req, sizeof(tpacket_req3)) < 0)
-        goto failed;
-
-    req.tp_retire_blk_tov = 0;
-    req.tp_feature_req_word = 0;
-    req.tp_block_nr = inst->params.tp_w_block_num;
-    if (setsockopt(fd, SOL_PACKET, PACKET_TX_RING, &req, sizeof(tpacket_req3)) < 0)
+    if (setsockopt(sck->fd, SOL_PACKET, PACKET_RX_RING, &req, sizeof(struct tpacket_req3)) < 0)
         goto failed;
 
     // set packet loss option
@@ -199,16 +205,20 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
     sck->tp_map_size = req.tp_block_size * req.tp_block_nr + inst->params.tp_w_block_num;
     if ((sck->tp_map = (uint8_t*)mmap(NULL, sck->tp_map_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_LOCKED, sck->fd, 0)) == MAP_FAILED) 
         goto failed;
-
-    sck->tp_rd = (struct iovec*)so->inst.params.mm_alloc(req.tp_block_nr * sizeof(struct iovec));
+    sck->tp_rd = (struct iovec*)inst->params.mm_alloc(req.tp_block_nr * sizeof(struct iovec));
     for (i = 0; i < req.tp_block_nr; ++i) {
         sck->tp_rd[i].iov_base = sck->tp_map + (i * req.tp_block_size);
         sck->tp_rd[i].iov_len = req.tp_block_size;
     }
 
-    sck->tp_wd = (struct iovec*)so->inst.params.mm_alloc(inst->params.tp_w_block_num * sizeof(struct iovec));
+    req.tp_retire_blk_tov = 0;
+    req.tp_feature_req_word = 0;
+    req.tp_block_nr = inst->params.tp_w_block_num;
+    if (setsockopt(sck->fd, SOL_PACKET, PACKET_TX_RING, &req, sizeof(struct tpacket_req3)) < 0)
+        goto failed;
+    sck->tp_wd = (struct iovec*)inst->params.mm_alloc(inst->params.tp_w_block_num * sizeof(struct iovec));
     for (i = 0; i < inst->params.tp_w_block_num; ++i) {
-        sck->tp_wd[i].iov_base = sck->tp_map + ((i + inst->params.tp_block_nr) * req.tp_block_size);
+        sck->tp_wd[i].iov_base = sck->tp_map + ((i + inst->params.tp_block_num) * req.tp_block_size);
         sck->tp_wd[i].iov_len = req.tp_block_size;
     }
 
@@ -230,12 +240,12 @@ int pm_close(struct pm_socket *sck) {
     if(sck->fd)
         close(sck->fd);
     if(sck->tp_wd)
-        sck->inst.params.mm_free(sck->tp_wd);
+        sck->inst->params.mm_free(sck->tp_wd);
     if(sck->tp_rd)
-        sck->inst.params.mm_free(sck->tp_rd);
+        sck->inst->params.mm_free(sck->tp_rd);
     if(sck->tp_map)
         munmap(sck->tp_map, sck->tp_map_size);
-    sck->inst.params.mm_free(sck);
+    sck->inst->params.mm_free(sck);
 }
 
 int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr){

@@ -1,12 +1,10 @@
 
 
-#ifndef PM_SOCK_H_
-#define PM_SOCK_H_
+#ifndef PM_INC_H_
+#define PM_INC_H_
 
-/*
-packet_mmap with libuinet(user tcp/ip stack)
-*/
-#include "pm_inc.h"
+#include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,19 +30,6 @@ struct pm_params {
 	// const char* local_ip6; // opt, 
 	// const char* gateway_mac; // opt, 
 };
-
-struct pm_instance;
-struct pm_socket;
-
-int pm_init(struct pm_instance** out, struct pm_params* p);
-void pm_destroy(struct pm_instance* v);
-
-int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, int type, int proto);
-// void pm_shutdown(struct pm_socket* sck, int how);
-// int pm_accept(struct pm_socket *listener, struct pm_sockaddr **adr, struct pm_socket **aso);
-// int pm_bind(struct pm_socket *sck, struct pm_sockaddr *nam);
-int pm_close(struct pm_socket *sck);
-int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr);
 
 #ifdef __cplusplus
 }

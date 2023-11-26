@@ -1,7 +1,7 @@
 TOPDIR?=${CURDIR}/..
 include ${TOPDIR}/cflags.mk
 
-SUBDIRS=libuinet libuinet_demo libev libhttp_parser
+SUBDIRS=libuinet libpm libuinet_demo libev libhttp_parser
 ifeq (${HOST_OS},FreeBSD)
 SUBDIRS+=libuinetnv libuinet_memstat 
 endif

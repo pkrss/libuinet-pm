@@ -29,7 +29,7 @@ library: pm_sock.o
 	ln -sf $(SONAME) $(SONAME_GENERIC)
 
 package: pm_sock.o
-	$(AR) rcs libpm.a pm_sock.o
+	$(AR) rcs libpm_s.a pm_sock.o
 
 default: all
 
@@ -41,7 +41,9 @@ clean:
 install:
 	${UINET_INSTALL_DIR} -d ${UINET_DESTDIR}/lib
 	${UINET_INSTALL_DIR} -d ${UINET_DESTDIR}/include
-	${UINET_INSTALL_LIB} libpm.a ${UINET_DESTDIR}/lib
-	${UINET_INSTALL_LIB} libpm.so ${UINET_DESTDIR}/lib
+	${UINET_INSTALL_LIB} libpm_s.a ${UINET_DESTDIR}/lib
+	${UINET_INSTALL_LIB} ${SONAME} ${UINET_DESTDIR}/lib
+	rm -f ${UINET_DESTDIR}/lib/${SONAME_GENERIC}
+	ln -s ${UINET_DESTDIR}/lib/${SONAME} ${UINET_DESTDIR}/lib/${SONAME_GENERIC}
 	${UINET_INSTALL_INC} pm_sock.h ${UINET_DESTDIR}/include
 

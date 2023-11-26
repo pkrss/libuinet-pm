@@ -49,7 +49,8 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     inst = (struct pm_instance*)((p && p->mm_alloc ? p->mm_alloc : malloc)(sizeof(struct pm_instance)));
     memset(inst, 0, sizeof(struct pm_instance));
 
-    inst->params = *p;
+    if(p)
+        inst->params = *p;
     p = &inst->params;
 
     ifni = if_nameindex();

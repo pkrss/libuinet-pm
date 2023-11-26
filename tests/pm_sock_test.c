@@ -3,7 +3,7 @@
 #include <string.h>
 #include <arpa/inet.h> // inet_pton
 
-// gcc -fdiagnostics-color=always -g pm_sock_test.c -o pm_sock_test.o -I../../../out/x64-linux-debug/include -L../../../out/x64-linux-debug/lib -lpm -luinet -lssl -lcrypto
+// gcc -fdiagnostics-color=always -g pm_sock_test.c -o pm_sock_test -I../../../out/x64-linux-debug/include -L../../../out/x64-linux-debug/lib -lpm_s -luinet -lssl -lcrypto
 
 int main (int argc, char **argv)
 {

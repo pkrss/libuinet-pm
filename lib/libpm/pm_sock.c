@@ -1,7 +1,6 @@
 
 
 #include <errno.h>
-
 #include "pm_sock.h"
 
 #include <stdlib.h>
@@ -14,6 +13,9 @@
 #include <linux/tcp.h>
 #include <net/if.h> // if_nameindex()
 #include "../libuinet/api_include/uinet_api.h"
+
+#include <unistd.h>
+#include <sys/socket.h>
 
 /*
 gcc -fdiagnostics-color=always -g pm_sock.c -o pm_sock.o -L../libuinet/ -llibuinet.a -lssl -lcrypto

@@ -9,8 +9,7 @@ packet_mmap with libuinet(user tcp/ip stack)
 // #include "pm_inc.h"
 #include <stdint.h>
 #include <stddef.h>
-#include <unistd.h>
-#include <sys/socket.h>
+#include <netinet/in.h>
 
 #ifdef __cplusplus
 extern "C" {

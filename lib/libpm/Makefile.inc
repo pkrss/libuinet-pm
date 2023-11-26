@@ -2,4 +2,4 @@
 # Definitions needed when building a consumer of libuinet
 #
 
-LDADD+= -luinet
+LDADD+= -luinet -lssl -lcrypto

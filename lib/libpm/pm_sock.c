@@ -1,9 +1,8 @@
 
 
 #include <errno.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include "pm_inc.h"
+
+#include "pm_sock.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +15,9 @@
 #include <net/if.h> // if_nameindex()
 #include "../libuinet/api_include/uinet_api.h"
 
+/*
+gcc -fdiagnostics-color=always -g pm_sock.c -o pm_sock.o -L../libuinet/ -llibuinet.a -lssl -lcrypto
+*/
 struct pm_instance {
     struct pm_params params;
     uinet_instance_t uinst;
@@ -235,8 +237,9 @@ failed:
 }
 
 int pm_close(struct pm_socket *sck) {
+    int res = 0;
     if(sck->aso)
-        uinet_soclose(sck->aso);
+        res = uinet_soclose(sck->aso);
     if(sck->fd)
         close(sck->fd);
     if(sck->tp_wd)
@@ -246,6 +249,7 @@ int pm_close(struct pm_socket *sck) {
     if(sck->tp_map)
         munmap(sck->tp_map, sck->tp_map_size);
     sck->inst->params.mm_free(sck);
+    return res;
 }
 
 int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr){

@@ -110,7 +110,6 @@ UINET_SRCS+=			\
 	uinet_config_kernel.c	\
 	uinet_elf_machdep.c	\
 	uinet_if.c		\
-	uinet_if_pcap.c		\
 	uinet_init.c		\
 	uinet_init_main.c	\
 	uinet_kern_clock.c	\
@@ -166,9 +165,8 @@ UINET_SRCS+=			\
 	uinet_vm_object.c
 
 ifneq (${HOST_OS},Darwin)
-UINET_SRCS+= uinet_if_netmap.c
+UINET_SRCS += uinet_if_netmap.c
 endif
-
 
 UINET_HOST_SRCS+=		\
 	uinet_api_errno.c	\
@@ -176,8 +174,9 @@ UINET_HOST_SRCS+=		\
 	uinet_kern_shutdown.c	\
 	uinet_host_sysctl_api.c
 
-
 ifdef PCAP_INCLUDE
+CFLAGS+= -DPCAP_INCLUDE=1
+UINET_SRCS += uinet_if_pcap.c
 UINET_HOST_SRCS+=uinet_if_pcap_host.c
 endif
 

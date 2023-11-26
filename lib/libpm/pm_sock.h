@@ -6,7 +6,11 @@
 /*
 packet_mmap with libuinet(user tcp/ip stack)
 */
-#include "pm_inc.h"
+// #include "pm_inc.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <unistd.h>
+#include <sys/socket.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -14,7 +14,7 @@ CFLAGS_DEBUG = $(CFLAGS) -O0 -g $(CFLAGS_DEBUG_EXTRA) $(DEBUG_FLAGS)
 CFLAGS_FAST = $(CFLAGS) -O3 $(CFLAGS_FAST_EXTRA) $(DEBUG_FLAGS)
 CFLAGS_LIB = $(CFLAGS) $(DEBUG_FLAGS) -fPIC
 
-LDFLAGS_LIB = $(LDFLAGS) -shared -L${UINET_DESTDIR}/lib -luinet
+LDFLAGS_LIB = $(LDFLAGS) -shared -L${UINET_DESTDIR}/lib -luinet -lssl -lcrypto
 
 ifneq (darwin,$(PLATFORM))
 # TODO(bnoordhuis) The native SunOS linker expects -h rather than -soname...
@@ -24,7 +24,7 @@ endif
 pm_sock.o: pm_sock.c pm_sock.h Makefile
 	$(CC) $(CPPFLAGS) $(CFLAGS_LIB) -c pm_sock.c -o pm_sock.o
 
-library: libhttp_parser.o
+library: pm_sock.o
 	$(CC) $(LDFLAGS_LIB) -o $(SONAME) $<
 	ln -sf $(SONAME) $(SONAME_GENERIC)
 

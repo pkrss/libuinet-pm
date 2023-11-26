@@ -8,6 +8,8 @@ ifeq (UINET_DESTDIR,"")
 	UINET_DESTDIR = /usr/local/
 endif
 
+# PCAP_INCLUDE ?= 1  # uncomment if installed pcap
+
 UINET_INSTALL	?= install
 UINET_INSTALL_DIR ?= $(UINET_INSTALL) -m 0755
 UINET_INSTALL_LIB ?= $(UINET_INSTALL) -m 0644

@@ -148,9 +148,11 @@ uinet_ifcreate(uinet_instance_t uinst, struct uinet_if_cfg *cfg, uinet_if_t *uif
 	case UINET_IFTYPE_NETMAP:
 		error = if_netmap_attach(new_uif);
 		break;
+#if defined(PCAP_INCLUDE)
 	case UINET_IFTYPE_PCAP:
 		error = if_pcap_attach(new_uif);
 		break;
+#endif
 	default:
 		printf("Error attaching interface with config %s: unknown interface type %d\n", new_uif->configstr, new_uif->type);
 		error = ENXIO;
@@ -193,9 +195,11 @@ uinet_ifdestroy_internal(struct uinet_instance *uinst, struct uinet_if *uif)
 	case UINET_IFTYPE_NETMAP:
 		error = if_netmap_detach(uif);
 		break;
+#if defined(PCAP_INCLUDE)
 	case UINET_IFTYPE_PCAP:
 		error = if_pcap_detach(uif);
 		break;
+#endif
 	default:
 		printf("Error detaching interface %s: unknown interface type %d\n", uif->name, uif->type);
 		error = ENXIO;

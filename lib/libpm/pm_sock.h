@@ -20,7 +20,7 @@ struct pm_params {
 	const unsigned int tp_block_size; // defualt: 40960;
     const unsigned int tp_frame_size; // defualt: 2048 for mtu 1500
 	const unsigned int tp_block_num; // defualt: 2
-	const unsigned int tp_w_block_num; // defualt: 2
+	const unsigned int tp_w_block_num; // defualt: 1
     
     void (*log_printf)(const char *fmt, ...); // opt, 
 

@@ -222,7 +222,7 @@ struct uinet_linger {
 
 #define	UINET_AF_UNSPEC		0		/* unspecified */
 #define	UINET_AF_INET		2		/* internetwork: UDP, TCP, etc. */
-#define	UINET_AF_INET6		28		/* IPv6 */
+#define	UINET_AF_INET6		10		/* IPv6, why old is 28? */
 
 #define	UINET_PF_UNSPEC		UINET_AF_UNSPEC
 #define	UINET_PF_INET		UINET_AF_INET

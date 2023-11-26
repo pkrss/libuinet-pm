@@ -109,22 +109,22 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
     struct pm_socket* sck = (struct pm_socket*)inst->params.mm_alloc(sizeof(struct pm_socket));
     memset(sck, 0, sizeof(struct pm_socket));
     sck->inst = inst;
-    switch(family){
-    case PF_INET:
-        family = UINET_PF_INET;
-        break;
-    case PF_INET6:
-        family = UINET_PF_INET6;
-        break;
-    }
-    switch(type){
-    case SOCK_STREAM:
-        type = UINET_SOCK_STREAM;
-        break;
-    case SOCK_DGRAM:
-        type = UINET_SOCK_DGRAM;
-        break;
-    }
+    // switch(family){
+    // case PF_INET:
+    //     family = UINET_PF_INET;
+    //     break;
+    // case PF_INET6:
+    //     family = UINET_PF_INET6;
+    //     break;
+    // }
+    // switch(type){
+    // case SOCK_STREAM:
+    //     type = UINET_SOCK_STREAM;
+    //     break;
+    // case SOCK_DGRAM:
+    //     type = UINET_SOCK_DGRAM;
+    //     break;
+    // }
     if((res = uinet_socreate(inst->uinst, family, &sck->aso, type, proto)) != 0)
         goto failed;
     if((sck->fd = socket(AF_PACKET, SOCK_RAW|SOCK_NONBLOCK, htons(ETH_P_ALL))) == -1)
@@ -239,5 +239,18 @@ int pm_close(struct pm_socket *sck) {
 }
 
 int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr){
-    return 0;
+    int res;
+    // struct uinet_sockaddr uadr;
+    // memset(&uadr, 0, sizeof(struct uinet_sockaddr));
+    // if(addr->sa_family == AF_INET){
+    //     uadr.sa_family = UINET_AF_INET;
+    //     uadr.sa_len = sizeof(struct sockaddr_in);
+    //     memcpy(uadr.sa_data, adr, uadr.sa_len);
+    // }else if(addr->sa_family == AF_INET6){
+    //     uadr.sa_family = UINET_AF_INET6;
+    //     uadr.sa_len = sizeof(struct sockaddr_in6);
+    //     memcpy(uadr.sa_data, adr, uadr.sa_len);
+    // }
+    res = uinet_soconnect(sck->aso, (struct uinet_sockaddr*)&adr);
+    return res;
 }

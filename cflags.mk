@@ -2,7 +2,9 @@ HOST_OS:=$(shell uname -s)
 
 DEBUG_FLAGS	?= -O -gdwarf-2
 
-UINET_DESTDIR	?= $(UINET_DESTDIR)
+# BUILD_ALL ?= 1 # uncomment if want to build libs / [libuinet_demo libev libhttp_parser]
+
+UINET_DESTDIR ?= $(UINET_DESTDIR)
 
 ifeq (UINET_DESTDIR,"")
 	UINET_DESTDIR = /usr/local/

@@ -1,6 +1,12 @@
 HOST_OS:=$(shell uname -s)
 
-DEBUG_FLAGS	?= -O -gdwarf-2
+DEBUG_FLAGS	?= -O0 -gdwarf-2
+
+ifeq (MY_CFLAGS,"")
+	MY_CFLAGS = -O2
+endif
+
+CFLAGS += $(MY_CFLAGS)
 
 # BUILD_ALL ?= 1 # uncomment if want to build libs / [libuinet_demo libev libhttp_parser]
 

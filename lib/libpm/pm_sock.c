@@ -271,6 +271,6 @@ int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr){
     //     uadr.sa_len = sizeof(struct sockaddr_in6);
     //     memcpy(uadr.sa_data, adr, uadr.sa_len);
     // }
-    res = uinet_soconnect(sck->aso, (struct uinet_sockaddr*)&adr);
+    res = uinet_soconnect(sck->aso, (struct uinet_sockaddr*)adr);
     return res;
 }

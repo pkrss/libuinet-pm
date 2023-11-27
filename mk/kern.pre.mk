@@ -20,14 +20,14 @@ else
 ifeq (${MACHINE_CPUARCH},powerpc)
 _MINUS_O=	-O	# gcc miscompiles some code at -O2
 else
-_MINUS_O=	-O2
+_MINUS_O=	
 endif
 endif
 ifeq (${MACHINE_CPUARCH},amd64)
 ifneq (${COMPILER_TYPE},clang)
-COPTFLAGS?=-O2 -frename-registers -pipe
+COPTFLAGS?=-frename-registers -pipe
 else
-COPTFLAGS?=-O2 -pipe
+COPTFLAGS?=-pipe
 endif
 else
 COPTFLAGS?=${_MINUS_O} -pipe

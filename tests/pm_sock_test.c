@@ -4,7 +4,7 @@
 #include <arpa/inet.h> // inet_pton
 #include <stdio.h> // printf
 
-// cd ../lib/libpm/ && export UINET_DESTDIR=../../../../out/x64-linux-debug && make all && make install
+// cd ../ && export UINET_DESTDIR=../../../../out/x64-linux-debug && export MY_CFLAGS="-g -O0" && make all && make install
 // gcc -fdiagnostics-color=always -g pm_sock_test.c -o pm_sock_test -I../../../out/x64-linux-debug/include -L../../../out/x64-linux-debug/lib -lpm_s -luinet -lssl -lcrypto
 
 int main (int argc, char **argv)
@@ -31,7 +31,7 @@ int main (int argc, char **argv)
 			break;
 
 		if((res = pm_socreate(inst, &sck, dst_family, SOCK_STREAM, IPPROTO_TCP)) != 0)
-			break;
+			; // break;
 
 		memset(&dst_adr, 0, sizeof(struct sockaddr_in));
 		if(inet_pton(dst_family, dst_ip, &dst_adr.sin_addr)==1){

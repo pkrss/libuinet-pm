@@ -3,7 +3,7 @@ include ${TOPDIR}/cflags.mk
 
 SUBDIRS = libuinet libpm
 
-ifdef BUILD_ALL
+ifeq (${BUILD_ALL},1)
 SUBDIRS += libuinet_demo libev libhttp_parser
 endif
 

@@ -9,7 +9,7 @@ include $(TOPDIR)/cflags.mk
 CC?=gcc
 AR?=ar
 
-CFLAGS += -Wall -Wextra -Werror -I${UINET_DESTDIR}/include
+CFLAGS += -Wall -Wextra -Werror # -I${UINET_DESTDIR}/include
 CFLAGS_DEBUG = $(CFLAGS) -O0 -g $(CFLAGS_DEBUG_EXTRA) $(DEBUG_FLAGS)
 CFLAGS_FAST = $(CFLAGS) -O3 $(CFLAGS_FAST_EXTRA) $(DEBUG_FLAGS)
 CFLAGS_LIB = $(CFLAGS) $(DEBUG_FLAGS) -fPIC
@@ -36,7 +36,8 @@ default: all
 all: library package
 
 clean:
-	rm -f *.o *.a *.so
+	rm -f *.o *.a *.so *.so.*
+	rm -f ${UINET_DESTDIR}/lib/libpm_s.a ${UINET_DESTDIR}/lib/${SONAME} ${UINET_DESTDIR}/include/pm_sock.h
 
 install:
 	${UINET_INSTALL_DIR} -d ${UINET_DESTDIR}/lib

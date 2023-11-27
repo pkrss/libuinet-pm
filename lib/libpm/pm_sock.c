@@ -1,6 +1,4 @@
 
-
-#include <errno.h>
 #include "pm_sock.h"
 
 #include <stdlib.h>
@@ -12,6 +10,8 @@
 #include <linux/ipv6.h>
 #include <linux/tcp.h>
 #include <net/if.h> // if_nameindex()
+#include <errno.h>
+#include <assert.h>
 #include "../libuinet/api_include/uinet_api.h"
 
 #include <unistd.h>
@@ -101,8 +101,8 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         p->tp_block_size = 40960;
     if(!p->tp_frame_size)
         p->tp_frame_size = (p->mtu / 1024 + 1) * 1024; // 2048        
-    if(!p->tp_block_num)
-        p->tp_block_num = 2;  
+    if(!p->tp_r_block_num)
+        p->tp_r_block_num = 2;  
     if(!p->tp_w_block_num)
         p->tp_w_block_num = 1;
 
@@ -187,11 +187,20 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
     memset(&req, 0, sizeof(struct tpacket_req3));
     req.tp_block_size = inst->params.tp_block_size;
     req.tp_frame_size = inst->params.tp_frame_size;
-    req.tp_block_nr = inst->params.tp_block_num;
-    req.tp_frame_nr = (inst->params.tp_block_size * inst->params.tp_block_num) / inst->params.tp_frame_size;
+    req.tp_block_nr = inst->params.tp_r_block_num;
+    req.tp_frame_nr = (inst->params.tp_block_size * inst->params.tp_r_block_num) / inst->params.tp_frame_size;
+    assert((inst->params.tp_block_size * inst->params.tp_r_block_num) % inst->params.tp_frame_size == 0);
     req.tp_retire_blk_tov = 60;
     req.tp_feature_req_word = TP_FT_REQ_FILL_RXHASH;
     if (setsockopt(sck->fd, SOL_PACKET, PACKET_RX_RING, &req, sizeof(struct tpacket_req3)) < 0)
+        goto failed;
+
+    req.tp_block_nr = inst->params.tp_w_block_num;
+    req.tp_frame_nr = (inst->params.tp_block_size * inst->params.tp_w_block_num) / inst->params.tp_frame_size;
+    assert((inst->params.tp_block_size * inst->params.tp_w_block_num) % inst->params.tp_frame_size == 0);
+    req.tp_retire_blk_tov = 0;
+    req.tp_feature_req_word = 0;
+    if (setsockopt(sck->fd, SOL_PACKET, PACKET_TX_RING, &req, sizeof(struct tpacket_req3)) < 0)
         goto failed;
 
     // set packet loss option
@@ -202,29 +211,23 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
     }
 
     // change send buffer size
-    // res = inst->params.tp_block_size * inst->params.tp_block_num;
+    // res = inst->params.tp_block_size * inst->params.tp_r_block_num;
     // if (setsockopt(sck->fd, SOL_SOCKET, SO_SNDBUF, (char *)&res, sizeof(res))<0)
     //     goto failed;
 
     // mmap memory in the kernel, send buffers after recv buffers
-    sck->tp_map_size = req.tp_block_size * req.tp_block_nr + inst->params.tp_w_block_num;
+    sck->tp_map_size = inst->params.tp_block_size * (inst->params.tp_r_block_num + inst->params.tp_w_block_num);
     if ((sck->tp_map = (uint8_t*)mmap(NULL, sck->tp_map_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_LOCKED, sck->fd, 0)) == MAP_FAILED) 
         goto failed;
-    sck->tp_rd = (struct iovec*)inst->params.mm_alloc(req.tp_block_nr * sizeof(struct iovec));
-    for (i = 0; i < req.tp_block_nr; ++i) {
-        sck->tp_rd[i].iov_base = sck->tp_map + (i * req.tp_block_size);
-        sck->tp_rd[i].iov_len = req.tp_block_size;
+    sck->tp_rd = (struct iovec*)inst->params.mm_alloc(inst->params.tp_r_block_num * sizeof(struct iovec));
+    for (i = 0; i < inst->params.tp_r_block_num; ++i) {
+        sck->tp_rd[i].iov_base = sck->tp_map + (i * inst->params.tp_block_size);
+        sck->tp_rd[i].iov_len = inst->params.tp_block_size;
     }
-
-    req.tp_retire_blk_tov = 0;
-    req.tp_feature_req_word = 0;
-    req.tp_block_nr = inst->params.tp_w_block_num;
-    if (setsockopt(sck->fd, SOL_PACKET, PACKET_TX_RING, &req, sizeof(struct tpacket_req3)) < 0)
-        goto failed;
     sck->tp_wd = (struct iovec*)inst->params.mm_alloc(inst->params.tp_w_block_num * sizeof(struct iovec));
     for (i = 0; i < inst->params.tp_w_block_num; ++i) {
-        sck->tp_wd[i].iov_base = sck->tp_map + ((i + inst->params.tp_block_num) * req.tp_block_size);
-        sck->tp_wd[i].iov_len = req.tp_block_size;
+        sck->tp_wd[i].iov_base = sck->tp_map + ((i + inst->params.tp_r_block_num) * req.tp_block_size);
+        sck->tp_wd[i].iov_len = inst->params.tp_block_size;
     }
 
     *out = sck;

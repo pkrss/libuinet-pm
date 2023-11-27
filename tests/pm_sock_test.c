@@ -2,6 +2,7 @@
 #include "../lib/libpm/pm_sock.h"
 #include <string.h>
 #include <arpa/inet.h> // inet_pton
+#include <stdio.h> // printf
 
 // gcc -fdiagnostics-color=always -g pm_sock_test.c -o pm_sock_test -I../../../out/x64-linux-debug/include -L../../../out/x64-linux-debug/lib -lpm_s -luinet -lssl -lcrypto
 
@@ -9,6 +10,7 @@ int main (int argc, char **argv)
 {
 	int res;
 	struct pm_instance* inst;
+	struct pm_params inst_p;
 	struct pm_socket* sck;
 	struct sockaddr_in dst_adr;
 	const char* dst_ip;
@@ -22,7 +24,9 @@ int main (int argc, char **argv)
 	dst_port = 443;
 
 	do {
-		if((res = pm_init(&inst, NULL)) != 0)
+		memset(&inst_p, 0, sizeof(struct pm_params));
+		inst_p.log_printf = printf;
+		if((res = pm_init(&inst, &inst_p)) != 0)
 			break;
 
 		if((res = pm_socreate(inst, &sck, dst_family, SOCK_STREAM, IPPROTO_TCP)) != 0)

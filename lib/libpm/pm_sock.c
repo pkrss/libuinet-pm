@@ -13,8 +13,9 @@
 #include <errno.h>
 #include <assert.h>
 #include "../libuinet/api_include/uinet_api.h"
-
+#include <netdb.h> // NI_MAXHOST
 #include <unistd.h>
+#include <ifaddrs.h>
 #include <sys/socket.h>
 
 /*
@@ -25,6 +26,10 @@ struct pm_instance {
     uinet_instance_t uinst;
     struct {
         int i_ifindex;
+        struct sockaddr_in local_adr;
+        struct sockaddr_in6 local_adr6;
+        struct sockaddr_in gw_adr;
+        struct sockaddr_in6 gw_adr6;
     } opt;
 };
 
@@ -41,10 +46,16 @@ struct pm_socket {
     size_t tp_map_size;
 };
 
+void pm_log_printf_none(const char *fmt, ...){
+    (void)fmt;
+}
+
 int pm_init(struct pm_instance** out, struct pm_params* p) {
-    int found;
+    int found, family; // res
     struct if_nameindex* ifni;
+    struct ifaddrs *ifaddr, *ifa;
     struct pm_instance* inst;
+    // char host[NI_MAXHOST];
 
     inst = (struct pm_instance*)((p && p->mm_alloc ? p->mm_alloc : malloc)(sizeof(struct pm_instance)));
     memset(inst, 0, sizeof(struct pm_instance));
@@ -53,6 +64,9 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         inst->params = *p;
     p = &inst->params;
 
+    if(!p->log_printf)
+        p->log_printf = pm_log_printf_none;
+
     ifni = if_nameindex();
     // check netdev
     if(!p->netdev || !p->netdev[0]){
@@ -60,8 +74,7 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
             if(ifni->if_name[0] == 'e') { // eth0 or ens5
                 p->netdev = ifni->if_name;
                 inst->opt.i_ifindex = if_nametoindex(ifni->if_name);
-                if(p->log_printf)
-                    p->log_printf("found netdev:%s", ifni->if_name);
+                p->log_printf("found netdev:%s", ifni->if_name);
                 break;
             }
             ifni++;
@@ -76,14 +89,85 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
             ifni++;
         }
         if(!found){
-            if(p->log_printf)
-                p->log_printf("unfound netdev in local interfaces:%s, exiting", p->netdev);
+            p->log_printf("unfound netdev in local interfaces:%s, exiting", p->netdev);
             goto failed;
         }
         inst->opt.i_ifindex = if_nametoindex(ifni->if_name);
         p->netdev = ifni->if_name;
     }
 
+    if(p->local_adr)
+        memcpy(&inst->opt.local_adr, p->local_adr, sizeof(struct sockaddr_in));
+    if(p->local_adr6)
+        memcpy(&inst->opt.local_adr6, p->local_adr6, sizeof(struct sockaddr_in6));
+    if(p->gw_adr)
+        memcpy(&inst->opt.gw_adr, p->gw_adr, sizeof(struct sockaddr_in));
+    if(p->gw_adr6)
+        memcpy(&inst->opt.gw_adr6, p->gw_adr6, sizeof(struct sockaddr_in6));
+
+    // $ ip addr show  @see: https://www.man7.org/linux/man-pages/man3/getifaddrs.3.html
+    if (getifaddrs(&ifaddr) == -1)
+        goto failed;
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+        if(strcmp(p->netdev, ifa->ifa_name))
+            continue;
+        family = ifa->ifa_addr->sa_family;
+
+        if ((family != AF_INET) && (family != AF_INET6))
+            continue;
+
+        // if ((res = getnameinfo(ifa->ifa_addr, family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST)) != 0) {
+        //     p->log_printf("getnameinfo() failed: %s\n", gai_strerror(res));
+        //     continue;
+        // }
+        // p->log_printf("getnameinfo() result: family:%d %s ifa_flags:0x%x \n", family, host, ifa->ifa_flags);     
+        // IFF_POINTOPOINT
+        // getnameinfo() result: family:2 172.30.36.220 ifa_flags:0x11043 
+        // getnameinfo() result: family:10 fe80::215:5dff:fe0d:f0ab%eth0 ifa_flags:0x11043
+        if(!p->local_adr && (family == AF_INET))
+            memcpy(&inst->opt.local_adr, ifa->ifa_addr, sizeof(struct sockaddr_in));
+        if(!p->local_adr6 && (family == AF_INET6))
+            memcpy(&inst->opt.local_adr6, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+        if(!p->gw_adr && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET))
+            memcpy(&inst->opt.gw_adr, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in));
+        if(!p->gw_adr6 && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6))
+            memcpy(&inst->opt.gw_adr6, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6));
+
+        // if(bind_ip.empty() && (family == AF_INET) && ifa->ifa_flags){
+        //     if ((res = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST)) != 0) {
+        //         p->log_printf("getnameinfo() failed: %s\n", gai_strerror(res));
+        //         continue;
+        //     }
+        //     bind_ip = host;
+        // } else if(bind_ip6.empty() && (family == AF_INET6)){
+        //     if ((res = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in6), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST)) != 0) {
+        //         p->log_printf("getnameinfo() failed: %s\n", gai_strerror(res));
+        //         continue;
+        //     }
+        //     bind_ip6 = host;
+        // } 
+        // if(gw_ip.empty() && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
+        //     if ((res = getnameinfo(ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST)) != 0) {
+        //         p->log_printf("getnameinfo() failed: %s\n", gai_strerror(res));
+        //         continue;
+        //     }
+        //     gw_ip = host;
+        // } else if(gw_ip6.empty() && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
+        //     if ((res = getnameinfo(ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST)) != 0) {
+        //         p->log_printf("getnameinfo() failed: %s\n", gai_strerror(res));
+        //         continue;
+        //     }
+        //     gw_ip6 = host;
+        // }
+    }
+    freeifaddrs(ifaddr);
+
+    if(!p->local_port)
+        p->local_port = 984;
+        
     struct uinet_global_cfg cfg;
 	uinet_default_cfg(&cfg, UINET_GLOBAL_CFG_MEDIUM);
 	uinet_init(&cfg, NULL);
@@ -260,17 +344,17 @@ int pm_close(struct pm_socket *sck) {
 
 int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr){
     int res;
-    // struct uinet_sockaddr uadr;
-    // memset(&uadr, 0, sizeof(struct uinet_sockaddr));
-    // if(addr->sa_family == AF_INET){
-    //     uadr.sa_family = UINET_AF_INET;
-    //     uadr.sa_len = sizeof(struct sockaddr_in);
-    //     memcpy(uadr.sa_data, adr, uadr.sa_len);
-    // }else if(addr->sa_family == AF_INET6){
-    //     uadr.sa_family = UINET_AF_INET6;
-    //     uadr.sa_len = sizeof(struct sockaddr_in6);
-    //     memcpy(uadr.sa_data, adr, uadr.sa_len);
-    // }
-    res = uinet_soconnect(sck->aso, (struct uinet_sockaddr*)adr);
+
+    do{
+        if((res=uinet_so_set_pm_info(sck->aso, adr->sin_family == AF_INET ? &sck->inst->opt.local_adr : (struct sockaddr_in*)&sck->inst->opt.local_adr6, htons(sck->inst->params.local_port))))
+            break;
+            
+        struct uinet_sockaddr uadr;
+        memset(&uadr, 0, sizeof(struct uinet_sockaddr));
+		uadr.sa_len = sizeof(struct uinet_sockaddr);
+		memcpy(&uadr.sa_family, &adr->sin_family, sizeof(struct sockaddr_in));
+        res = uinet_soconnect(sck->aso, &uadr);
+    } while(0);
+
     return res;
 }

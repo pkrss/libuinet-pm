@@ -5,9 +5,10 @@
 #include <arpa/inet.h> // inet_pton
 #include <stdio.h> // printf
 #include <errno.h>
+#include <netdb.h>
 
-// cd ../ && export UINET_DESTDIR=../../../../out/x64-linux-debug && export MY_CFLAGS="-g -O0" && make all && make install
-// gcc -fdiagnostics-color=always -g pm_sock_test.c -o pm_sock_test -I../../../out/x64-linux-debug/include -L../../../out/x64-linux-debug/lib -lpm_s -luinet -lssl -lcrypto
+// build lib: cd ../ && export UINET_DESTDIR=../../../../out/x64-linux-debug && export MY_CFLAGS="-g -O0" && make all && make install
+// build me: gcc -fdiagnostics-color=always -g pm_sock_test.c -o pm_sock_test -I../../../out/x64-linux-debug/include -L../../../out/x64-linux-debug/lib -lpm_s -luinet -lssl -lcrypto
 
 // bool set_fd_ip(int fd, const char* netdev, char *ipaddr)
 // {
@@ -35,7 +36,7 @@
 //     return 0;  
 // }
 
-int test_uinet(int dst_family, struct sockaddr_in* dst_adr){
+int test_uinet(int dst_family, struct sockaddr_in* local_adr, struct sockaddr_in* dst_adr){
 	int res;
 	struct uinet_global_cfg cfg;
 	struct uinet_socket* aso;
@@ -46,51 +47,36 @@ int test_uinet(int dst_family, struct sockaddr_in* dst_adr){
 	const char* local_ip;
 	int local_port;
 	const char* netdev;
-	struct uinet_if_cfg ifcfg;
-	uinet_if_t uif;
 	do {
 		local_ip = "0.0.0.0";
 		local_port = 984;
 		netdev = "eth0";
 
+		uinet_if_t uif;
 		uinet_default_cfg(&cfg, UINET_GLOBAL_CFG_MEDIUM);
 		uinet_init(&cfg, NULL);
 		uinst = uinet_instance_create(NULL);
 
-		memset(&ifcfg, 0, sizeof(ifcfg));
-		ifcfg.configstr = netdev;
-		ifcfg.alias = netdev;
-		if((res = uinet_ifcreate(uinst, &ifcfg, &uif)))
+		if((res = uinet_socreate(uinst, dst_family, &aso, SOCK_STREAM, IPPROTO_TCP)) != 0) //
 			break;
 
-		if((res = uinet_socreate(uinst, dst_family, &aso, SOCK_STREAM, 0)) != 0) // IPPROTO_TCP
-			break;
-			
-		ifindex = uinet_iffind_byname(uinst, netdev);
-
-		// if ((res = uinet_make_socket_promiscuous(aso, ifindex)))
+		// if(0){
+		// struct uinet_if_cfg ifcfg;
+		// memset(&ifcfg, 0, sizeof(ifcfg));
+		// ifcfg.configstr = netdev;
+		// ifcfg.alias = netdev;
+		// if((res = uinet_ifcreate(uinst, &ifcfg, &uif)))
 		// 	break;
-		
-		// get_client_tuple(connscale, index, local_mac, foreign_mac, vlan, &local_ip, &local_port, &foreign_ip, &foreign_port);
-		
-		// if (connscale->vlans.size > 0) {
-		// 	unsigned int vindex;
-		// 	uint32_t ethertype;
-				
-		// 	tagstack.inl2t_cnt = connscale->vlans.size;
-		// 	for (vindex = 0; vindex < connscale->vlans.size; vindex++) {
-		// 		ethertype = (vindex == (connscale->vlans.size - 1)) ? 0x8100 : 0x88a8;
-		// 		tagstack.inl2t_tags[vindex] = htonl((ethertype << 16) | vlan[vindex]);
-		// 		tagstack.inl2t_masks[vindex] = (vlan[vindex] == 0) ? 0 : htonl(0x00000fff);
-		// 	}
+		// ifindex = uinet_iffind_byname(uinst, netdev);
 		// }
-		// if ((res = uinet_setl2info2(aso, local_mac, foreign_mac, UINET_INL2I_TAG_ANY, NULL)))
-		// 	break;
-		if ((res = uinet_interface_up(uinst, netdev, 0, 0)))
-			;// break;
 
-		if ((res = uinet_interface_add_alias(uinst, netdev, "172.30.41.113", "172.30.47.255", "255.255.240.0")))
-			break;
+		// if(0){
+		// 	if ((res = uinet_interface_up(uinst, netdev, 0, 0)))
+		// 		;// break;
+
+		// 	if ((res = uinet_interface_add_alias(uinst, netdev, "172.30.41.113", "172.30.47.255", "255.255.240.0")))
+		// 		break;
+		// }
 
 		// memset(&uadr_local, 0, sizeof(struct uinet_sockaddr_in));
 		// uadr_local.sin_len = sizeof(struct uinet_sockaddr_in);
@@ -100,6 +86,9 @@ int test_uinet(int dst_family, struct sockaddr_in* dst_adr){
 		// res = uinet_sobind(aso, (struct uinet_sockaddr *)&uadr_local);
 		// if (0 != res) 
 		// 	break;
+
+		if((res=uinet_so_set_pm_info(aso, local_adr, htons(local_port))))
+			break;
 
 		memset(&uadr, 0, sizeof(struct uinet_sockaddr));
 		uadr.sa_len = sizeof(struct uinet_sockaddr);
@@ -150,33 +139,58 @@ int test_pm(int dst_family, struct sockaddr_in* dst_adr){
 	return res;
 }
 
+int hostname_to_adr(int family, const char *hostname, struct in_addr *out_adr)
+{
+	// int sockfd;  
+	struct addrinfo hints, *servinfo, *p;
+	// struct sockaddr_in *h;
+	int rv;
+
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = family; // use AF_INET6 to force IPv6
+	hints.ai_socktype = SOCK_STREAM;
+
+	if ( (rv = getaddrinfo( hostname , "http" , &hints , &servinfo)) != 0) 
+	{
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+		return -1;
+	}
+
+	// loop through all the results and connect to the first we can
+	for(p = servinfo; p != NULL; p = p->ai_next) 
+	{
+		*out_adr = ((struct sockaddr_in *)p->ai_addr)->sin_addr;
+		// h = (struct sockaddr_in *) p->ai_addr;
+		// strcpy(ip , inet_ntoa( h->sin_addr ) );
+		break;
+	}
+	
+	freeaddrinfo(servinfo); // all done with this structure
+	return 0;
+}
+
 int main (int argc, char **argv)
 {
 	int res;
-	struct sockaddr_in dst_adr;
-	const char* dst_ip;
-	int dst_port;
+	struct sockaddr_in dst_adr, local_adr;
 	int dst_family;
 
 	dst_family = AF_INET;
-	dst_ip = "142.251.222.36";
-	dst_port = 443;
 
 	do {
 		res = -1;
-
+			
 		memset(&dst_adr, 0, sizeof(struct sockaddr_in));
-		if(inet_pton(dst_family, dst_ip, &dst_adr.sin_addr)==1){
-			dst_adr.sin_family = dst_family;
-			// dst_adr.sin_addr.s_addr = inet_addr(ip);
-			dst_adr.sin_port = ntohs(dst_port);
-		}else{
+		dst_adr.sin_family = dst_family;
+		// dst_adr.sin_addr.s_addr = inet_addr(ip);
+		dst_adr.sin_port = ntohs(443);
+
+		if(hostname_to_adr(dst_family, "www.google.com", &dst_adr.sin_addr))
 			break;
-		}
 
-		res = test_uinet(dst_family, &dst_adr);
+		// res = test_uinet(dst_family, NULL, &dst_adr);
 
-		// res = test_pm(dst_family, &dst_adr);
+		res = test_pm(dst_family, &dst_adr);
 
 	}while(0);
 

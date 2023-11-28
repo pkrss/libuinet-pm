@@ -116,3 +116,4 @@ uinet_if_xmit
 uinet_lock_log_set_file
 uinet_lock_log_enable
 uinet_lock_log_disable
+uinet_so_set_pm_info

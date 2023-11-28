@@ -30,10 +30,14 @@ struct pm_params {
     void* (*mm_alloc)(size_t n); // opt, 
     void (*mm_free)(void*); // opt, 
     
-	// int local_port; // opt, 
+	int local_port; // opt, 
 	// const char* local_ip; // opt, 
 	// const char* local_ip6; // opt, 
 	// const char* gateway_mac; // opt, 
+    struct sockaddr_in* local_adr; // opt
+    struct sockaddr_in6* local_adr6; // opt
+    struct sockaddr_in* gw_adr; // opt
+    struct sockaddr_in6* gw_adr6; // opt
 };
 
 struct pm_instance;

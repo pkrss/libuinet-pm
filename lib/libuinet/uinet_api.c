@@ -2230,3 +2230,13 @@ uinet_pd_drop(struct uinet_pd_list *pkts)
 		pool->free(free_group, free_group_count);
 	}
 }
+
+int uinet_so_set_pm_info(struct uinet_socket *uso, struct sockaddr_in* local_adr, int lport){
+	struct socket *so = (struct socket *)uso;
+	struct inpcb *inp = sotoinpcb(so);
+	// struct tcpcb *tp = intotcpcb(inp);
+	// struct inpcb *inp = tp->t_inpcb
+	inp->inp_lport = lport;
+	inp->inp_laddr = local_adr->sin_addr;
+	return 0;
+}

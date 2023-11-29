@@ -134,17 +134,17 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         }
         if(!p->local_adr6 && (family == AF_INET6)){
             memcpy(&inst->opt.local_adr6.sin6_family, ifa->ifa_addr, sizeof(struct sockaddr_in6));
-            inst->opt.local_adr.sin_len = sizeof(struct pm_sockaddr_in6);
+            inst->opt.local_adr6.sin6_len = sizeof(struct pm_sockaddr_in6);
             p->local_adr6 = &inst->opt.local_adr6;
         }
         if(!p->gw_adr && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
             memcpy(&inst->opt.gw_adr.sin_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in));
-            inst->opt.local_adr.sin_len = sizeof(struct pm_sockaddr_in);
+            inst->opt.gw_adr.sin_len = sizeof(struct pm_sockaddr_in);
             p->gw_adr = &inst->opt.gw_adr;
         }
         if(!p->gw_adr6 && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
             memcpy(&inst->opt.gw_adr6.sin6_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6));
-            inst->opt.local_adr.sin_len = sizeof(struct pm_sockaddr_in6);
+            inst->opt.gw_adr6.sin6_len = sizeof(struct pm_sockaddr_in6);
             p->gw_adr6 = &inst->opt.gw_adr6;
         }
 

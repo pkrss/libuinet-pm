@@ -196,7 +196,7 @@ int main (int argc, char **argv)
 		// dst_adr.sin_addr.s_addr = inet_addr(ip);
 		dst_adr.sin_port = ntohs(443);
 
-		if(hostname_to_adr(dst_family, "www.google.com", &dst_adr.sin_addr))
+		if(hostname_to_adr(dst_family, "www.google.com", (struct in_addr*)&dst_adr.sin_addr))
 			break;
 
 		// res = test_uinet(dst_family, NULL, &dst_adr);

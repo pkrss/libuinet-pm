@@ -17,7 +17,7 @@ extern "C" {
 
 // ** begin uinet internet style. **
 
-typedef	unsigned short		pm_sa_family_t;
+typedef	uint8_t		pm_sa_family_t;
 
 typedef uint32_t pm_in_addr_t;
 struct pm_in_addr

@@ -26,10 +26,10 @@ struct pm_instance {
     uinet_instance_t uinst;
     struct {
         int i_ifindex;
-        struct sockaddr_in local_adr;
-        struct sockaddr_in6 local_adr6;
-        struct sockaddr_in gw_adr;
-        struct sockaddr_in6 gw_adr6;
+        struct pm_sockaddr_in local_adr;
+        struct pm_sockaddr_in6 local_adr6;
+        struct pm_sockaddr_in gw_adr;
+        struct pm_sockaddr_in6 gw_adr6;
     } opt;
 };
 
@@ -97,13 +97,13 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     }
 
     if(p->local_adr)
-        memcpy(&inst->opt.local_adr, p->local_adr, sizeof(struct sockaddr_in));
+        memcpy(&inst->opt.local_adr, p->local_adr, sizeof(struct pm_sockaddr_in));
     if(p->local_adr6)
-        memcpy(&inst->opt.local_adr6, p->local_adr6, sizeof(struct sockaddr_in6));
+        memcpy(&inst->opt.local_adr6, p->local_adr6, sizeof(struct pm_sockaddr_in6));
     if(p->gw_adr)
-        memcpy(&inst->opt.gw_adr, p->gw_adr, sizeof(struct sockaddr_in));
+        memcpy(&inst->opt.gw_adr, p->gw_adr, sizeof(struct pm_sockaddr_in));
     if(p->gw_adr6)
-        memcpy(&inst->opt.gw_adr6, p->gw_adr6, sizeof(struct sockaddr_in6));
+        memcpy(&inst->opt.gw_adr6, p->gw_adr6, sizeof(struct pm_sockaddr_in6));
 
     // $ ip addr show  @see: https://www.man7.org/linux/man-pages/man3/getifaddrs.3.html
     if (getifaddrs(&ifaddr) == -1)
@@ -128,19 +128,23 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         // getnameinfo() result: family:2 172.30.36.220 ifa_flags:0x11043 
         // getnameinfo() result: family:10 fe80::215:5dff:fe0d:f0ab%eth0 ifa_flags:0x11043
         if(!p->local_adr && (family == AF_INET)){
-            memcpy(&inst->opt.local_adr, ifa->ifa_addr, sizeof(struct sockaddr_in));
+            memcpy(&inst->opt.local_adr.sin_family, ifa->ifa_addr, sizeof(struct sockaddr_in));
+            inst->opt.local_adr.sin_len = sizeof(struct pm_sockaddr_in);
             p->local_adr = &inst->opt.local_adr;
         }
         if(!p->local_adr6 && (family == AF_INET6)){
-            memcpy(&inst->opt.local_adr6, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+            memcpy(&inst->opt.local_adr6.sin6_family, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+            inst->opt.local_adr.sin_len = sizeof(struct pm_sockaddr_in6);
             p->local_adr6 = &inst->opt.local_adr6;
         }
         if(!p->gw_adr && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
-            memcpy(&inst->opt.gw_adr, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in));
+            memcpy(&inst->opt.gw_adr.sin_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in));
+            inst->opt.local_adr.sin_len = sizeof(struct pm_sockaddr_in);
             p->gw_adr = &inst->opt.gw_adr;
         }
         if(!p->gw_adr6 && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
-            memcpy(&inst->opt.gw_adr6, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6));
+            memcpy(&inst->opt.gw_adr6.sin6_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6));
+            inst->opt.local_adr.sin_len = sizeof(struct pm_sockaddr_in6);
             p->gw_adr6 = &inst->opt.gw_adr6;
         }
 
@@ -350,24 +354,20 @@ int pm_close(struct pm_socket *sck) {
     return res;
 }
 
-int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr){
+int pm_connect(struct pm_socket *sck, struct pm_sockaddr *adr){
     return uinet_pm_connect(sck->inst, sck->aso, adr);
 }
 
-int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct sockaddr_in *adr){
+int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct pm_sockaddr *adr){
     int res;
 
     do{
-        if((res=uinet_so_set_pm_info(aso, adr->sin_family == AF_INET ? &inst->opt.local_adr : (struct sockaddr_in*)&inst->opt.local_adr6, 
+        if((res=uinet_so_set_pm_info(aso, adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.local_adr : (struct uinet_sockaddr*)&inst->opt.local_adr6, 
             htons(inst->params.local_port),
-            adr->sin_family == AF_INET ? &inst->opt.gw_adr : (struct sockaddr_in*)&inst->opt.gw_adr6, inst->params.mtu)))
+            adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.gw_adr : (struct uinet_sockaddr*)&inst->opt.gw_adr6, inst->params.mtu)))
             break;
-            
-        struct uinet_sockaddr uadr;
-        memset(&uadr, 0, sizeof(struct uinet_sockaddr));
-		uadr.sa_len = sizeof(struct uinet_sockaddr);
-		memcpy(&uadr.sa_family, &adr->sin_family, sizeof(struct sockaddr_in));
-        res = uinet_soconnect(aso, &uadr);
+        adr->sa_len = (adr->sa_family == AF_INET ? sizeof(struct pm_sockaddr_in) : sizeof(struct pm_sockaddr_in6));
+        res = uinet_soconnect(aso, (struct uinet_sockaddr*)adr);
     } while(0);
 
     return res;

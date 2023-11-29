@@ -248,7 +248,7 @@ struct inpcb {
 	struct rwlock	inp_lock;
 	struct {		
 		int	flags;		// inpcb_pm_flags_enabled|...
-		struct sockaddr_in * gw_dst; // gateway/broadcast dst
+		struct uinet_sockaddr* gw_dst; // gateway/broadcast dst
 		int mtu;
 	} pm_opt;
 };

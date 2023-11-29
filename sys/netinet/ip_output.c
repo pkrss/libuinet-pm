@@ -289,6 +289,7 @@ again:
 		// dst = inp->pm_opt.gw_dst;
 		mtu = (inp->pm_opt.mtu ? inp->pm_opt.mtu : 1500);
 		ip->ip_ttl = 1;
+		// ip->ip_src.s_addr =
 		// goto sendit;
 	} else if (flags & IP_SENDONES) {
 		if ((ia = ifatoia(ifa_ifwithbroadaddr(sintosa(dst)))) == NULL &&

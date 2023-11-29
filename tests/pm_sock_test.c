@@ -36,78 +36,78 @@
 //     return 0;  
 // }
 
-int test_uinet(int dst_family, struct sockaddr_in* local_adr, struct sockaddr_in* dst_adr){
-	int res;
-	struct uinet_global_cfg cfg;
-	struct uinet_socket* aso;
-	uinet_instance_t uinst;
-	struct uinet_sockaddr uadr;
-	struct uinet_sockaddr_in uadr_local;
-	uinet_if_t ifindex;
-	const char* local_ip;
-	int local_port;
-	const char* netdev;
-	do {
-		local_ip = "0.0.0.0";
-		local_port = 984;
-		netdev = "eth0";
+// int test_uinet(int dst_family, struct sockaddr_in* local_adr, struct sockaddr_in* dst_adr){
+// 	int res;
+// 	struct uinet_global_cfg cfg;
+// 	struct uinet_socket* aso;
+// 	uinet_instance_t uinst;
+// 	struct uinet_sockaddr uadr;
+// 	struct uinet_sockaddr_in uadr_local;
+// 	uinet_if_t ifindex;
+// 	const char* local_ip;
+// 	int local_port;
+// 	const char* netdev;
+// 	do {
+// 		local_ip = "0.0.0.0";
+// 		local_port = 984;
+// 		netdev = "eth0";
 
-		uinet_if_t uif;
-		uinet_default_cfg(&cfg, UINET_GLOBAL_CFG_MEDIUM);
-		uinet_init(&cfg, NULL);
-		uinst = uinet_instance_create(NULL);
+// 		uinet_if_t uif;
+// 		uinet_default_cfg(&cfg, UINET_GLOBAL_CFG_MEDIUM);
+// 		uinet_init(&cfg, NULL);
+// 		uinst = uinet_instance_create(NULL);
 
-		if((res = uinet_socreate(uinst, dst_family, &aso, SOCK_STREAM, IPPROTO_TCP)) != 0) //
-			break;
+// 		if((res = uinet_socreate(uinst, dst_family, &aso, SOCK_STREAM, IPPROTO_TCP)) != 0) //
+// 			break;
 
-		// if(0){
-		// struct uinet_if_cfg ifcfg;
-		// memset(&ifcfg, 0, sizeof(ifcfg));
-		// ifcfg.configstr = netdev;
-		// ifcfg.alias = netdev;
-		// if((res = uinet_ifcreate(uinst, &ifcfg, &uif)))
-		// 	break;
-		// ifindex = uinet_iffind_byname(uinst, netdev);
-		// }
+// 		// if(0){
+// 		// struct uinet_if_cfg ifcfg;
+// 		// memset(&ifcfg, 0, sizeof(ifcfg));
+// 		// ifcfg.configstr = netdev;
+// 		// ifcfg.alias = netdev;
+// 		// if((res = uinet_ifcreate(uinst, &ifcfg, &uif)))
+// 		// 	break;
+// 		// ifindex = uinet_iffind_byname(uinst, netdev);
+// 		// }
 
-		// if(0){
-		// 	if ((res = uinet_interface_up(uinst, netdev, 0, 0)))
-		// 		;// break;
+// 		// if(0){
+// 		// 	if ((res = uinet_interface_up(uinst, netdev, 0, 0)))
+// 		// 		;// break;
 
-		// 	if ((res = uinet_interface_add_alias(uinst, netdev, "172.30.41.113", "172.30.47.255", "255.255.240.0")))
-		// 		break;
-		// }
+// 		// 	if ((res = uinet_interface_add_alias(uinst, netdev, "172.30.41.113", "172.30.47.255", "255.255.240.0")))
+// 		// 		break;
+// 		// }
 
-		// memset(&uadr_local, 0, sizeof(struct uinet_sockaddr_in));
-		// uadr_local.sin_len = sizeof(struct uinet_sockaddr_in);
-		// uadr_local.sin_family = UINET_AF_INET;
-		// uadr_local.sin_addr.s_addr = inet_addr(local_ip);
-		// uadr_local.sin_port = htons(local_port);
-		// res = uinet_sobind(aso, (struct uinet_sockaddr *)&uadr_local);
-		// if (0 != res) 
-		// 	break;
+// 		// memset(&uadr_local, 0, sizeof(struct uinet_sockaddr_in));
+// 		// uadr_local.sin_len = sizeof(struct uinet_sockaddr_in);
+// 		// uadr_local.sin_family = UINET_AF_INET;
+// 		// uadr_local.sin_addr.s_addr = inet_addr(local_ip);
+// 		// uadr_local.sin_port = htons(local_port);
+// 		// res = uinet_sobind(aso, (struct uinet_sockaddr *)&uadr_local);
+// 		// if (0 != res) 
+// 		// 	break;
 
-		if((res=uinet_so_set_pm_info(aso, local_adr, htons(local_port))))
-			break;
+// 		if((res=uinet_so_set_pm_info(aso, local_adr, htons(local_port))))
+// 			break;
 
-		memset(&uadr, 0, sizeof(struct uinet_sockaddr));
-		uadr.sa_len = sizeof(struct uinet_sockaddr);
-		// uadr.sa_family = dst_adr->sin_family;
-		memcpy(&uadr.sa_family, &dst_adr->sin_family, sizeof(struct sockaddr_in));
-		if((res = uinet_soconnect(aso, &uadr)) != 0)
-			break;
-	}while(0);
+// 		memset(&uadr, 0, sizeof(struct uinet_sockaddr));
+// 		uadr.sa_len = sizeof(struct uinet_sockaddr);
+// 		// uadr.sa_family = dst_adr->sin_family;
+// 		memcpy(&uadr.sa_family, &dst_adr->sin_family, sizeof(struct sockaddr_in));
+// 		if((res = uinet_soconnect(aso, &uadr)) != 0)
+// 			break;
+// 	}while(0);
 
-	// if(res)
-	// 	res = errno;
-    // if(!res)
-    //     res = -1;
+// 	// if(res)
+// 	// 	res = errno;
+//     // if(!res)
+//     //     res = -1;
 
-    printf("test_uinet failed, %d %s", res, strerror(res));
-	return res;
-}
+//     printf("test_uinet failed, %d %s", res, strerror(res));
+// 	return res;
+// }
 
-int test_pm(int dst_family, struct sockaddr_in* dst_adr){
+int test_pm(int dst_family, struct pm_sockaddr* dst_adr){
 	int res;
 	struct pm_instance* inst;
 	struct pm_params inst_p;
@@ -126,12 +126,12 @@ int test_pm(int dst_family, struct sockaddr_in* dst_adr){
 		if((res = pm_init(&inst, &inst_p)) != 0)
 			break;
 
-		if(0){
+		if(0){ // need root or cap_net_admin?
 			if((res = pm_socreate(inst, &sck, dst_family, SOCK_STREAM, IPPROTO_TCP)) != 0)
 				break;
 			if((res = pm_connect(sck, dst_adr)) != 0)
 				break;
-		}else{
+		}else{ // only for debug
 			uinet_inst = uinst_instance_get(inst);
 			if((res = uinet_socreate(uinet_inst, dst_family, &aso, SOCK_STREAM, IPPROTO_TCP)) != 0) //
 				break;
@@ -183,7 +183,7 @@ int hostname_to_adr(int family, const char *hostname, struct in_addr *out_adr)
 int main (int argc, char **argv)
 {
 	int res;
-	struct sockaddr_in dst_adr, local_adr;
+	struct pm_sockaddr_in dst_adr;
 	int dst_family;
 
 	dst_family = AF_INET;
@@ -191,7 +191,7 @@ int main (int argc, char **argv)
 	do {
 		res = -1;
 			
-		memset(&dst_adr, 0, sizeof(struct sockaddr_in));
+		memset(&dst_adr, 0, sizeof(dst_adr));
 		dst_adr.sin_family = dst_family;
 		// dst_adr.sin_addr.s_addr = inet_addr(ip);
 		dst_adr.sin_port = ntohs(443);
@@ -201,7 +201,7 @@ int main (int argc, char **argv)
 
 		// res = test_uinet(dst_family, NULL, &dst_adr);
 
-		res = test_pm(dst_family, &dst_adr);
+		res = test_pm(dst_family, (struct pm_sockaddr*)&dst_adr);
 
 	}while(0);
 

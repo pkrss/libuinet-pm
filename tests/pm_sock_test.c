@@ -107,7 +107,7 @@
 // 	return res;
 // }
 
-int test_pm(int dst_family, struct pm_sockaddr* dst_adr){
+int test_pm(int family, struct pm_sockaddr* dst_adr){
 	int res;
 	struct pm_instance* inst;
 	struct pm_params inst_p;
@@ -126,14 +126,14 @@ int test_pm(int dst_family, struct pm_sockaddr* dst_adr){
 		if((res = pm_init(&inst, &inst_p)) != 0)
 			break;
 
-		if(0){ // need root or cap_net_admin?
-			if((res = pm_socreate(inst, &sck, dst_family, SOCK_STREAM, IPPROTO_TCP)) != 0)
+		if(0){ // SOCK_RAW need root or cap_net_admin?
+			if((res = pm_socreate(inst, &sck, family, SOCK_STREAM|SOCK_NONBLOCK, IPPROTO_TCP)) != 0)
 				break;
 			if((res = pm_connect(sck, dst_adr)) != 0)
 				break;
 		}else{ // only for debug
 			uinet_inst = uinst_instance_get(inst);
-			if((res = uinet_socreate(uinet_inst, dst_family, &aso, SOCK_STREAM|SOCK_NONBLOCK, IPPROTO_TCP)) != 0) //
+			if((res = uinet_socreate(uinet_inst, family, &aso, SOCK_STREAM|SOCK_NONBLOCK, IPPROTO_TCP)) != 0) //
 				break;
 			if((res = uinet_pm_connect(inst, aso, dst_adr)) != 0)
 				break;

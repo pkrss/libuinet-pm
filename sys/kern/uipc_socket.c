@@ -3683,11 +3683,14 @@ sysctl_somaxconn(SYSCTL_HANDLER_ARGS)
 void
 soisconnecting(struct socket *so)
 {
-
-	SOCK_LOCK(so);
+	if(!(sotoinpcb(so)->pm_opt.flags & inpcb_pm_flags_no_lock)) {
+		SOCK_LOCK(so);
+	}
 	so->so_state &= ~(SS_ISCONNECTED|SS_ISDISCONNECTING);
 	so->so_state |= SS_ISCONNECTING;
-	SOCK_UNLOCK(so);
+	if(!(sotoinpcb(so)->pm_opt.flags & inpcb_pm_flags_no_lock)) {
+		SOCK_UNLOCK(so);
+	}
 }
 
 void

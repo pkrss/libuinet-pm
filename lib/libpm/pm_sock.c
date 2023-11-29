@@ -74,7 +74,7 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
             if(ifni->if_name[0] == 'e') { // eth0 or ens5
                 p->netdev = ifni->if_name;
                 inst->opt.i_ifindex = if_nametoindex(ifni->if_name);
-                p->log_printf("found netdev:%s", ifni->if_name);
+                p->log_printf("found netdev:%s\n", ifni->if_name);
                 break;
             }
             ifni++;
@@ -89,7 +89,7 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
             ifni++;
         }
         if(!found){
-            p->log_printf("unfound netdev in local interfaces:%s, exiting", p->netdev);
+            p->log_printf("unfound netdev in local interfaces:%s, exiting\n", p->netdev);
             goto failed;
         }
         inst->opt.i_ifindex = if_nametoindex(ifni->if_name);
@@ -110,7 +110,7 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         goto failed;
 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr == NULL)
+        if ((ifa->ifa_addr == NULL) || !(ifa->ifa_flags & IFF_RUNNING)) //  || !(ifa->ifa_flags & IFF_MULTICAST)
             continue;
         if(strcmp(p->netdev, ifa->ifa_name))
             continue;
@@ -127,14 +127,22 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         // IFF_POINTOPOINT
         // getnameinfo() result: family:2 172.30.36.220 ifa_flags:0x11043 
         // getnameinfo() result: family:10 fe80::215:5dff:fe0d:f0ab%eth0 ifa_flags:0x11043
-        if(!p->local_adr && (family == AF_INET))
+        if(!p->local_adr && (family == AF_INET)){
             memcpy(&inst->opt.local_adr, ifa->ifa_addr, sizeof(struct sockaddr_in));
-        if(!p->local_adr6 && (family == AF_INET6))
+            p->local_adr = &inst->opt.local_adr;
+        }
+        if(!p->local_adr6 && (family == AF_INET6)){
             memcpy(&inst->opt.local_adr6, ifa->ifa_addr, sizeof(struct sockaddr_in6));
-        if(!p->gw_adr && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET))
+            p->local_adr6 = &inst->opt.local_adr6;
+        }
+        if(!p->gw_adr && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
             memcpy(&inst->opt.gw_adr, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in));
-        if(!p->gw_adr6 && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6))
+            p->gw_adr = &inst->opt.gw_adr;
+        }
+        if(!p->gw_adr6 && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
             memcpy(&inst->opt.gw_adr6, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6));
+            p->gw_adr6 = &inst->opt.gw_adr6;
+        }
 
         // if(bind_ip.empty() && (family == AF_INET) && ifa->ifa_flags){
         //     if ((res = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST)) != 0) {
@@ -343,18 +351,28 @@ int pm_close(struct pm_socket *sck) {
 }
 
 int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr){
+    return uinet_pm_connect(sck->inst, sck->aso, adr);
+}
+
+int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct sockaddr_in *adr){
     int res;
 
     do{
-        if((res=uinet_so_set_pm_info(sck->aso, adr->sin_family == AF_INET ? &sck->inst->opt.local_adr : (struct sockaddr_in*)&sck->inst->opt.local_adr6, htons(sck->inst->params.local_port))))
+        if((res=uinet_so_set_pm_info(aso, adr->sin_family == AF_INET ? &inst->opt.local_adr : (struct sockaddr_in*)&inst->opt.local_adr6, 
+            htons(inst->params.local_port),
+            adr->sin_family == AF_INET ? &inst->opt.gw_adr : (struct sockaddr_in*)&inst->opt.gw_adr6, inst->params.mtu)))
             break;
             
         struct uinet_sockaddr uadr;
         memset(&uadr, 0, sizeof(struct uinet_sockaddr));
 		uadr.sa_len = sizeof(struct uinet_sockaddr);
 		memcpy(&uadr.sa_family, &adr->sin_family, sizeof(struct sockaddr_in));
-        res = uinet_soconnect(sck->aso, &uadr);
+        res = uinet_soconnect(aso, &uadr);
     } while(0);
 
     return res;
+}
+
+struct uinet_instance* uinst_instance_get(struct pm_instance* inst) {
+    return inst->uinst;
 }

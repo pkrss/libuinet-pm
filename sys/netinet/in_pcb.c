@@ -2417,7 +2417,6 @@ in_pcbrehash_mbuf(struct inpcb *inp, struct mbuf *m)
 void
 in_pcbrehash(struct inpcb *inp)
 {
-
 	in_pcbrehash_mbuf(inp, NULL);
 }
 

@@ -1111,6 +1111,15 @@ tcp_connect(struct tcpcb *tp, struct sockaddr *nam, struct thread *td)
 	u_short lport;
 	int error;
 
+	if(inp->pm_opt.flags & inpcb_pm_flags_enabled) {
+		if(nan->sa_family == AF_INET)
+			inp->inp_faddr.s_addr = ((struct sockaddr_in *)nam)->sin_addr.s_addr;
+		else
+			memcpy(&inp->in6p_faddr.s_addr, &((struct sockaddr_in6 *)nam)->sin6_addr, sizeof(struct in6_addr));
+		inp->inp_fport = ((struct sockaddr_in *)nam)->sin_port;
+		goto main_logic;
+	}
+
 	INP_WLOCK_ASSERT(inp);
 	INP_HASH_WLOCK(&V_tcbinfo);
 
@@ -1139,6 +1148,7 @@ tcp_connect(struct tcpcb *tp, struct sockaddr *nam, struct thread *td)
 	in_pcbrehash(inp);
 	INP_HASH_WUNLOCK(&V_tcbinfo);
 
+main_logic:
 	/*
 	 * Compute window scaling to request:
 	 * Scale to fit into sweet spot.  See tcp_syncache.c.

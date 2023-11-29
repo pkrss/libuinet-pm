@@ -284,7 +284,13 @@ again:
 	 * interface is specified by the broadcast address of an interface,
 	 * or the destination address of a ptp interface.
 	 */
-	if (flags & IP_SENDONES) {
+	if(inp->pm_opt.gw_dst){
+		// ip->ip_dst.s_addr = inp->pm_opt.gw_dst->s_addr;
+		// dst = inp->pm_opt.gw_dst;
+		mtu = (inp->pm_opt.mtu ? inp->pm_opt.mtu : 1500);
+		ip->ip_ttl = 1;
+		// goto sendit;
+	} else if (flags & IP_SENDONES) {
 		if ((ia = ifatoia(ifa_ifwithbroadaddr(sintosa(dst)))) == NULL &&
 		    (ia = ifatoia(ifa_ifwithdstaddr(sintosa(dst)))) == NULL) {
 			IPSTAT_INC(ips_noroute);
@@ -336,6 +342,7 @@ again:
 #endif
 			rte = ro->ro_rt;
 		}
+		
 		if (rte == NULL ||
 		    rte->rt_ifp == NULL ||
 		    !RT_LINK_IS_UP(rte->rt_ifp)) {
@@ -345,7 +352,7 @@ again:
 			 * possible that a matching SPD entry exists.
 			 */
 			no_route_but_check_spd = 1;
-			mtu = 0; /* Silence GCC warning. */
+			mtu = 0;
 			goto sendit;
 #endif
 			IPSTAT_INC(ips_noroute);
@@ -378,7 +385,7 @@ again:
 		if (rte->rt_rmx.rmx_mtu > ifp->if_mtu)
 			rte->rt_rmx.rmx_mtu = ifp->if_mtu;
 		mtu = rte->rt_rmx.rmx_mtu;
-	} else {
+	} else if(!inp->pm_opt.gw_dst){
 		mtu = ifp->if_mtu;
 	}
 	/* Catch a possible divide by zero later. */

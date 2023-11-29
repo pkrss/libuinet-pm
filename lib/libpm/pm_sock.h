@@ -53,6 +53,11 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
 int pm_close(struct pm_socket *sck);
 int pm_connect(struct pm_socket *sck, struct sockaddr_in *adr);
 
+struct uinet_socket;
+struct uinet_instance;
+int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct sockaddr_in *adr);
+struct uinet_instance* uinst_instance_get(struct pm_instance* inst);
+
 #ifdef __cplusplus
 }
 #endif

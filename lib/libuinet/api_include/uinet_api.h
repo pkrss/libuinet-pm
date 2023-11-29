@@ -259,7 +259,7 @@ void uinet_pd_ref_release(struct uinet_pd_ctx *pdctx[], uint32_t n);
 void uinet_pd_deliver_to_stack(struct uinet_if *uif, struct uinet_pd_list *pkts);
 void uinet_pd_drop(struct uinet_pd_list *pkts);
 
-int uinet_so_set_pm_info(struct uinet_socket *uso, struct sockaddr_in* local_adr, int lport);
+int uinet_so_set_pm_info(struct uinet_socket *uso, struct sockaddr_in* local_adr, int lport, struct sockaddr_in* gw_adr, int mtu);
 
 #ifdef __cplusplus
 }

@@ -113,6 +113,9 @@ int test_pm(int dst_family, struct sockaddr_in* dst_adr){
 	struct pm_params inst_p;
 	struct pm_socket* sck;
 
+	struct uinet_instance* uinet_inst;
+	struct uinet_socket *aso;
+
 	inst = NULL;
 	sck = NULL;
 
@@ -123,11 +126,19 @@ int test_pm(int dst_family, struct sockaddr_in* dst_adr){
 		if((res = pm_init(&inst, &inst_p)) != 0)
 			break;
 
-		if((res = pm_socreate(inst, &sck, dst_family, SOCK_STREAM, IPPROTO_TCP)) != 0)
-			break;
+		if(0){
+			if((res = pm_socreate(inst, &sck, dst_family, SOCK_STREAM, IPPROTO_TCP)) != 0)
+				break;
+			if((res = pm_connect(sck, dst_adr)) != 0)
+				break;
+		}else{
+			uinet_inst = uinst_instance_get(inst);
+			if((res = uinet_socreate(uinet_inst, dst_family, &aso, SOCK_STREAM, IPPROTO_TCP)) != 0) //
+				break;
+			if((res = uinet_pm_connect(inst, aso, dst_adr)) != 0)
+				break;
+		}
 
-		if((res = pm_connect(sck, dst_adr)) != 0)
-			break;
 	}while(0);
 
 	if(sck)

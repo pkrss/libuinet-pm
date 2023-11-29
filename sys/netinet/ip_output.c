@@ -151,6 +151,7 @@ ip_output(struct mbuf *m, struct mbuf *opt, struct route *ro, int flags,
 	struct ifl2info *l2i_tag = NULL;
 	int ispromisc = 0;
 #endif
+	u_long if_hwa = 0;
 	M_ASSERTPKTHDR(m);
 
 	if (inp != NULL) {
@@ -289,7 +290,8 @@ again:
 		// dst = inp->pm_opt.gw_dst;
 		mtu = (inp->pm_opt.mtu ? inp->pm_opt.mtu : 1500);
 		ip->ip_ttl = 1;
-		// ip->ip_src.s_addr =
+		isbroadcast = 0;
+		if_hwa = (CSUM_TCP_IPV6 | CSUM_UDP_IPV6 | CSUM_SCTP_IPV6 | CSUM_IP | CSUM_TCP | CSUM_UDP | CSUM_SCTP | CSUM_IP_FRAGS | CSUM_FRAGMENT);
 		// goto sendit;
 	} else if (flags & IP_SENDONES) {
 		if ((ia = ifatoia(ifa_ifwithbroadaddr(sintosa(dst)))) == NULL &&
@@ -506,7 +508,7 @@ again:
 	 * interface in which case packetdrop should be done by queueing.
 	 */
 	n = ip_len / mtu + 1; /* how many fragments ? */
-	if (
+	if (ifp &&
 #ifdef ALTQ
 	    (!ALTQ_IS_ENABLED(&ifp->if_snd)) &&
 #endif /* ALTQ */
@@ -649,8 +651,11 @@ passout:
 		}
 	}
 
+	if(ifp)
+		if_hwa = ifp->if_hwassist;
+
 	m->m_pkthdr.csum_flags |= CSUM_IP;
-	sw_csum = m->m_pkthdr.csum_flags & ~ifp->if_hwassist;
+	sw_csum = m->m_pkthdr.csum_flags & ~if_hwa;
 	if (sw_csum & CSUM_DELAY_DATA) {
 		in_delayed_cksum(m);
 		sw_csum &= ~CSUM_DELAY_DATA;
@@ -661,15 +666,15 @@ passout:
 		sw_csum &= ~CSUM_SCTP;
 	}
 #endif
-	m->m_pkthdr.csum_flags &= ifp->if_hwassist;
+	m->m_pkthdr.csum_flags &= if_hwa;
 
 	/*
 	 * If small enough for interface, or the interface will take
 	 * care of the fragmentation for us, we can just send directly.
 	 */
 	if (ip_len <= mtu ||
-	    (m->m_pkthdr.csum_flags & ifp->if_hwassist & CSUM_TSO) != 0 ||
-	    ((ip_off & IP_DF) == 0 && (ifp->if_hwassist & CSUM_FRAGMENT))) {
+	    (m->m_pkthdr.csum_flags & if_hwa & CSUM_TSO) != 0 ||
+	    ((ip_off & IP_DF) == 0 && (if_hwa & CSUM_FRAGMENT))) {
 		ip->ip_sum = 0;
 		if (sw_csum & CSUM_DELAY_IP)
 			ip->ip_sum = in_cksum(m, hlen);
@@ -697,8 +702,8 @@ passout:
 		 * to avoid confusing lower layers.
 		 */
 		m->m_flags &= ~(M_PROTOFLAGS);
-		error = (*ifp->if_output)(ifp, m,
-		    		(struct sockaddr *)dst, ro);
+		error = ifp ? (*ifp->if_output)(ifp, m,
+		    		(struct sockaddr *)dst, ro) : 0;
 		goto done;
 	}
 
@@ -713,7 +718,7 @@ passout:
 	 * Too large for interface; fragment if possible. If successful,
 	 * on return, m will point to a list of packets to be sent.
 	 */
-	error = ip_fragment(ip, &m, mtu, ifp->if_hwassist, sw_csum);
+	error = ip_fragment(ip, &m, mtu, if_hwa, sw_csum);
 	if (error)
 		goto bad;
 

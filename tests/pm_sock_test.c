@@ -133,7 +133,7 @@ int test_pm(int dst_family, struct pm_sockaddr* dst_adr){
 				break;
 		}else{ // only for debug
 			uinet_inst = uinst_instance_get(inst);
-			if((res = uinet_socreate(uinet_inst, dst_family, &aso, SOCK_STREAM, IPPROTO_TCP)) != 0) //
+			if((res = uinet_socreate(uinet_inst, dst_family, &aso, SOCK_STREAM|SOCK_NONBLOCK, IPPROTO_TCP)) != 0) //
 				break;
 			if((res = uinet_pm_connect(inst, aso, dst_adr)) != 0)
 				break;

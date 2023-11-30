@@ -152,6 +152,8 @@ ip_output(struct mbuf *m, struct mbuf *opt, struct route *ro, int flags,
 	int ispromisc = 0;
 #endif
 	u_long if_hwa = 0;
+	int	(*if_output) __P((struct ifnet *, struct mbuf *, struct sockaddr *, struct rtentry *)) = NULL;
+
 	M_ASSERTPKTHDR(m);
 
 	if (inp != NULL) {
@@ -285,13 +287,14 @@ again:
 	 * interface is specified by the broadcast address of an interface,
 	 * or the destination address of a ptp interface.
 	 */
-	if(inp->pm_opt.gw_dst){
+	if(inp->pm_opt.flags & inpcb_pm_flags_enabled){
 		// ip->ip_dst.s_addr = inp->pm_opt.gw_dst->s_addr;
 		// dst = inp->pm_opt.gw_dst;
 		mtu = (inp->pm_opt.mtu ? inp->pm_opt.mtu : 1500);
 		ip->ip_ttl = 1;
 		isbroadcast = 0;
 		if_hwa = (CSUM_TCP_IPV6 | CSUM_UDP_IPV6 | CSUM_SCTP_IPV6 | CSUM_IP | CSUM_TCP | CSUM_UDP | CSUM_SCTP | CSUM_IP_FRAGS | CSUM_FRAGMENT);
+		if_output = inp->pm_opt.ip_output;
 		// goto sendit;
 	} else if (flags & IP_SENDONES) {
 		if ((ia = ifatoia(ifa_ifwithbroadaddr(sintosa(dst)))) == NULL &&
@@ -668,6 +671,9 @@ passout:
 #endif
 	m->m_pkthdr.csum_flags &= if_hwa;
 
+	if(ifp)
+		if_output = ifp->if_output;
+
 	/*
 	 * If small enough for interface, or the interface will take
 	 * care of the fragmentation for us, we can just send directly.
@@ -702,8 +708,8 @@ passout:
 		 * to avoid confusing lower layers.
 		 */
 		m->m_flags &= ~(M_PROTOFLAGS);
-		error = ifp ? (*ifp->if_output)(ifp, m,
-		    		(struct sockaddr *)dst, ro) : 0;
+		error = (*if_output)(ifp, m,
+		    		(struct sockaddr *)dst, ro);
 		goto done;
 	}
 
@@ -736,8 +742,8 @@ passout:
 			 * to avoid confusing upper layers.
 			 */
 			m->m_flags &= ~(M_PROTOFLAGS);
-			error = (*ifp->if_output)(ifp, m,
-			    (struct sockaddr *)dst, ro);
+			if(if_output)
+				error = (*if_output)(ifp, m, (struct sockaddr *)dst, ro);
 		} else
 			m_freem(m);
 	}

@@ -250,6 +250,7 @@ struct inpcb {
 		int	flags;		// inpcb_pm_flags_enabled|...
 		struct uinet_sockaddr* gw_dst; // gateway/broadcast dst
 		int mtu;
+		int (*ip_output)(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
 	} pm_opt;
 };
 #define	inp_fibnum	inp_inc.inc_fibnum

@@ -805,6 +805,15 @@ send:
 	 */
 	KASSERT(len >= 0, ("[%s:%d]: len < 0", __func__, __LINE__));
 
+	if(0){ // tp->t_inpcb->pm_opt.
+		// struct mb_args args;
+		// args.flags = M_PKTHDR;
+		// args.type = MT_DATA;
+		// m = ((struct mbuf *)(uma_zalloc_arg(zone_mbuf, &args, M_DONTWAIT)));
+	}else{
+		MGETHDR(m, M_DONTWAIT, MT_DATA);
+	}
+
 	/*
 	 * Grab a header mbuf, attaching a copy of data to
 	 * be transmitted, and initialize the header from
@@ -824,7 +833,9 @@ send:
 			TCPSTAT_INC(tcps_sndpack);
 			TCPSTAT_ADD(tcps_sndbyte, len);
 		}
-		MGETHDR(m, M_DONTWAIT, MT_DATA);
+		
+		// MGETHDR(m, M_DONTWAIT, MT_DATA);
+
 		if (m == NULL) {
 			SOCKBUF_UNLOCK(&so->so_snd);
 			error = ENOBUFS;
@@ -884,7 +895,7 @@ send:
 		else
 			TCPSTAT_INC(tcps_sndwinup);
 
-		MGETHDR(m, M_DONTWAIT, MT_DATA);
+		// MGETHDR(m, M_DONTWAIT, MT_DATA);
 		if (m == NULL) {
 			error = ENOBUFS;
 			goto out;

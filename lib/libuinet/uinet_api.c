@@ -654,6 +654,7 @@ uinet_soconnect(struct uinet_socket *uso, struct uinet_sockaddr *nam)
 	struct socket *so = (struct socket *)uso;
 	int error;
 	int interrupted = 0;
+	struct inpcb *inp = sotoinpcb(so);
 
 	if (so->so_state & SS_ISCONNECTING) {
 		error = EALREADY;
@@ -667,6 +668,10 @@ uinet_soconnect(struct uinet_socket *uso, struct uinet_sockaddr *nam)
 		error = EINPROGRESS;
 		goto done1;
 	}
+
+	if(inp->pm_opt.flags & inpcb_pm_flags_enabled)
+		goto done1;
+
 	CURVNET_SET(so->so_vnet);
 	SOCK_LOCK(so);
 	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
@@ -2245,5 +2250,8 @@ int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_sockaddr* local_
 	inp->pm_opt.flags |= inpcb_pm_flags_enabled | inpcb_pm_flags_no_lock;
 	inp->pm_opt.gw_dst = gw_adr;
 	inp->pm_opt.mtu = mtu;
+	extern	int  ether_output(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
+	inp->pm_opt.ip_output = &ether_output;
+
 	return 0;
 }

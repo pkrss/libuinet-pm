@@ -191,9 +191,9 @@ ether_output(struct ifnet *ifp, struct mbuf *m,
 #endif
 
 	M_PROFILE(m);
-	if (ifp->if_flags & IFF_MONITOR)
+	if (ifp && ifp->if_flags & IFF_MONITOR)
 		senderr(ENETDOWN);
-	if (!((ifp->if_flags & IFF_UP) &&
+	if (ifp && !((ifp->if_flags & IFF_UP) &&
 	    (ifp->if_drv_flags & IFF_DRV_RUNNING)))
 		senderr(ENETDOWN);
 
@@ -203,7 +203,7 @@ ether_output(struct ifnet *ifp, struct mbuf *m,
 	case AF_INET:
 		type = htons(ETHERTYPE_IP);
 #ifdef PROMISCUOUS_INET
-		if (ifp->if_flags & IFF_PROMISCINET) {
+		if (ifp && ifp->if_flags & IFF_PROMISCINET) {
 			l2i_tag = (struct ifl2info *)m_tag_locate(m,
 								  MTAG_PROMISCINET,
 								  MTAG_PROMISCINET_L2INFO,

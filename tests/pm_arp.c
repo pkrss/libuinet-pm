@@ -674,7 +674,7 @@ int main( int argc, char ** argv )
     struct ifreq ifr,ifr2;
     int ret = -1;
     // struct if_nameindex * ifni = if_nameindex();
-    const char* target_ip = argc >= 2 ? argv[1] : "192.168.2.100";
+    const char* target_ip = argc >= 2 ? argv[1] : "192.168.2.1";
     // if (argc != 2) {
     //     printf("Usage: %s <INPUT_FILE>\n", argv[0]);
     //     return 1;

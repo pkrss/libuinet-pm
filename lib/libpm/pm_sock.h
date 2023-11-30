@@ -97,7 +97,7 @@ int pm_close(struct pm_socket *sck);
 int pm_connect(struct pm_socket *sck, struct pm_sockaddr *adr);
 
 // parse local and gw mac
-int pm_arp_parse_gw_mac(struct pm_instance* inst);
+// int pm_arp_parse_gw_mac(struct pm_instance* inst);
 
 struct uinet_socket;
 struct uinet_instance;

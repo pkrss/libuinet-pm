@@ -152,7 +152,7 @@ ip_output(struct mbuf *m, struct mbuf *opt, struct route *ro, int flags,
 	int ispromisc = 0;
 #endif
 	u_long if_hwa = 0;
-	int	(*if_output) __P((struct ifnet *, struct mbuf *, struct sockaddr *, struct rtentry *)) = NULL;
+	int	(*if_output) __P((struct ifnet *, struct mbuf *, struct sockaddr *, struct route *)) = NULL;
 
 	M_ASSERTPKTHDR(m);
 
@@ -393,7 +393,7 @@ again:
 		if (rte->rt_rmx.rmx_mtu > ifp->if_mtu)
 			rte->rt_rmx.rmx_mtu = ifp->if_mtu;
 		mtu = rte->rt_rmx.rmx_mtu;
-	} else if(!inp->pm_opt.gw_dst){
+	} else if(!(inp->pm_opt.flags & inpcb_pm_flags_enabled)){
 		mtu = ifp->if_mtu;
 	}
 	/* Catch a possible divide by zero later. */

@@ -1,6 +1,7 @@
 
 #include "pm_sock.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -30,8 +31,8 @@ struct pm_instance {
         struct pm_sockaddr_in6 local_adr6;        
         struct pm_sockaddr_in gw_adr;
         struct pm_sockaddr_in6 gw_adr6;
-        unsigned char local_mac[ETHER_ADDR_LEN+2];
-        unsigned char gw_mac[ETHER_ADDR_LEN+2];
+        unsigned char local_mac[ETH_ALEN+2];
+        unsigned char gw_mac[ETH_ALEN+2];
     } opt;
 };
 
@@ -53,10 +54,14 @@ void pm_log_printf_none(const char *fmt, ...){
 }
 
 int pm_init(struct pm_instance** out, struct pm_params* p) {
-    int found, family; // res
+    int found, family, res = -1; // res
     struct if_nameindex* ifni;
     struct ifaddrs *ifaddr, *ifa;
     struct pm_instance* inst;
+    int fd = -1;
+    struct ifreq ifr;
+    char* s = NULL, *s2;
+    FILE *fp = NULL;
     // char host[NI_MAXHOST];
 
     inst = (struct pm_instance*)((p && p->mm_alloc ? p->mm_alloc : malloc)(sizeof(struct pm_instance)));
@@ -65,6 +70,11 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     if(p)
         inst->params = *p;
     p = &inst->params;
+
+    if(!p->mm_alloc) // call p->mm_alloc() easy
+        p->mm_alloc = malloc;
+    if(!p->mm_free)
+        p->mm_free = free;
 
     if(!p->log_printf)
         p->log_printf = pm_log_printf_none;
@@ -102,8 +112,10 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         memcpy(&inst->opt.local_adr, p->local_adr, sizeof(struct pm_sockaddr_in));
     if(p->local_adr6)
         memcpy(&inst->opt.local_adr6, p->local_adr6, sizeof(struct pm_sockaddr_in6));
-    if(p->gw_adr)
-        memcpy(&inst->opt.gw_mac, p->gw_adr, ETHER_ADDR_LEN);
+    if(p->local_mac)
+        memcpy(&inst->opt.local_mac, p->local_mac, ETH_ALEN);
+    if(p->gw_mac)
+        memcpy(&inst->opt.gw_mac, p->gw_mac, ETH_ALEN);
 
     // $ ip addr show  @see: https://www.man7.org/linux/man-pages/man3/getifaddrs.3.html
     if (getifaddrs(&ifaddr) == -1)
@@ -127,25 +139,21 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         // IFF_POINTOPOINT
         // getnameinfo() result: family:2 172.30.36.220 ifa_flags:0x11043 
         // getnameinfo() result: family:10 fe80::215:5dff:fe0d:f0ab%eth0 ifa_flags:0x11043
-        if(!p->local_adr && (family == AF_INET)){
+        if(!inst->opt.local_adr.sin_len && (family == AF_INET)){
             memcpy(&inst->opt.local_adr.sin_family, ifa->ifa_addr, sizeof(struct sockaddr_in));
             inst->opt.local_adr.sin_len = sizeof(struct pm_sockaddr_in);
-            p->local_adr = &inst->opt.local_adr;
         }
-        if(!p->local_adr6 && (family == AF_INET6)){
+        if(!inst->opt.local_adr6.sin6_len && (family == AF_INET6)){
             memcpy(&inst->opt.local_adr6.sin6_family, ifa->ifa_addr, sizeof(struct sockaddr_in6));
             inst->opt.local_adr6.sin6_len = sizeof(struct pm_sockaddr_in6);
-            p->local_adr6 = &inst->opt.local_adr6;
         }
-        if(!p->gw_adr && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
+        if(!inst->opt.gw_adr.sin_len && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
             memcpy(&inst->opt.gw_adr.sin_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in));
             inst->opt.gw_adr.sin_len = sizeof(struct pm_sockaddr_in);
-            // p->gw_adr = &inst->opt.gw_adr;
         }
-        if(!p->gw_adr6 && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
+        if(!inst->opt.gw_adr6.sin6_len && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
             memcpy(&inst->opt.gw_adr6.sin6_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6));
             inst->opt.gw_adr6.sin6_len = sizeof(struct pm_sockaddr_in6);
-            // p->gw_adr6 = &inst->opt.gw_adr6;
         }
 
         // if(bind_ip.empty() && (family == AF_INET) && ifa->ifa_flags){
@@ -185,14 +193,6 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
 	uinet_init(&cfg, NULL);
     inst->uinst = uinet_instance_create(NULL);
 
-    if(!p->mm_alloc) // call p->mm_alloc() easy
-        p->mm_alloc = malloc;
-    if(!p->mm_free)
-        p->mm_free = free;
-
-    if(!p->mtu)
-        p->mtu = 1500;
-
     if(!p->tp_block_size)
         p->tp_block_size = 40960;
     if(!p->tp_frame_size)
@@ -202,16 +202,73 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     if(!p->tp_w_block_num)
         p->tp_w_block_num = 1;
 
-    if(!inst->inst->opt.gw_mac[0]){
-        if(pm_arp_parse_gw_mac(struct pm_instance* inst))
-            goto failed;
-    }
+    if((fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP))==-1)
+        goto failed;
+
+    do {
+        strcpy(ifr.ifr_name, p->netdev);
+
+        if(!inst->opt.local_mac[0]) {
+            if (ioctl(fd, SIOCGIFHWADDR, &ifr) == -1)
+                break;
+            memcpy(inst->opt.local_mac, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
+        }
+
+        if(!inst->opt.gw_mac[0]) {
+            // if arp not working, please ping it's ip first
+            
+            s = (char*)p->mm_alloc(1028);
+            sprintf(s, "arp -n | grep %s", p->netdev);
+            if ((fp = popen(s, "r")) == NULL) {
+                p->log_printf("failed to run command%s\n", s);
+                goto failed;
+            }
+
+            s[1024] = 0;
+            s[0] = 0;
+            fgets(s, 1024, fp);
+            pclose(fp);
+            fp = NULL;
+            
+            s2 = strchr(s, ':');
+            while(*(s2-1)!=' ')
+                --s2;
+
+            res = sscanf(s2,"%2x:%2x:%2x:%2x:%2x:%2x", &inst->opt.gw_mac[0], &inst->opt.gw_mac[1], &inst->opt.gw_mac[2],&inst->opt.gw_mac[3],&inst->opt.gw_mac[4],&inst->opt.gw_mac[5]);
+            if(res != 5 ){
+                p->log_printf("failed to parse gw mac%s\n", s2);
+                goto failed;
+            }
+            res = 0;
+        }
+
+        if(!p->mtu) {
+            if (ioctl(fd, SIOCGIFMTU, &ifr) != -1)
+                p->mtu = ifr.ifr_mtu;
+        }
+    } while(0);
+
+    if(!p->mtu)
+        p->mtu = 1500;
 
     *out = inst;
-    return 0;
+    res = 0;
 failed:
-    pm_destroy(inst);
-    return -1;
+
+    if (fd!=-1) {
+        close(fd);
+        fd = -1;
+    }
+
+    if(s){
+        p->mm_free(s);
+        s = NULL;
+    }
+
+    if(res)
+        pm_destroy(inst);
+
+    return res;
 }
 
 void pm_destroy(struct pm_instance* v){
@@ -369,7 +426,9 @@ int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct 
     do{
         if((res=uinet_so_set_pm_info(aso, adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.local_adr : (struct uinet_sockaddr*)&inst->opt.local_adr6, 
             htons(inst->params.local_port),
-            inst->opt.gw_mac)))
+            (const char*)inst->opt.local_mac,
+            (const char*)inst->opt.gw_mac,
+            inst->params.mtu)))
             break;
         adr->sa_len = (adr->sa_family == AF_INET ? sizeof(struct pm_sockaddr_in) : sizeof(struct pm_sockaddr_in6));
         res = uinet_soconnect(aso, (struct uinet_sockaddr*)adr);
@@ -382,7 +441,34 @@ struct uinet_instance* uinst_instance_get(struct pm_instance* inst) {
     return inst->uinst;
 }
 
-int pm_arp_parse_gw_mac(struct pm_instance* inst) {
-    // parse local and gw mac
-    return -1;
-}
+// int pm_arp_parse_gw_mac(struct pm_instance* inst) {
+//     // parse local and gw mac
+//     return -1;
+// }
+
+// int pm_get_cmd_result(struct pm_instance* inst, const char* cmd, const char* must_content){
+//     FILE *fp;
+//     char path[1035];
+//     int res = -1;
+
+//     /* Open the command for reading. */
+//     fp = popen(cmd, "r");
+//     if (fp == NULL) {
+//         inst->log_printf("failed to run command%s\n", cmd);
+//         return -1;
+//     }
+
+//     path[sizeof(path)-1] = 0;
+
+//     /* Read the output a line at a time - output it. */
+//     while (fgets(path, sizeof(path)-1, fp) != NULL) {
+//         if(!strstr(path, must_content))
+//             continue;
+//         res = 0;
+//         printf("%s", path);
+//     }
+
+//     /* close */
+//     pclose(fp);
+//     return res;
+// }

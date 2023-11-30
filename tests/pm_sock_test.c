@@ -6,6 +6,7 @@
 #include <stdio.h> // printf
 #include <errno.h>
 #include <netdb.h>
+#include <linux/netlink.h>
 
 // build lib: cd ../ && export UINET_DESTDIR=../../../../out/x64-linux-debug && export MY_CFLAGS="-g -O0" && make all && make install
 // build me: gcc -fdiagnostics-color=always -g pm_sock_test.c -o pm_sock_test -I../../../out/x64-linux-debug/include -L../../../out/x64-linux-debug/lib -lpm_s -luinet -lssl -lcrypto
@@ -190,6 +191,7 @@ int main (int argc, char **argv)
 
 	do {
 		res = -1;
+    	res = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 			
 		memset(&dst_adr, 0, sizeof(dst_adr));
 		dst_adr.sin_family = dst_family;

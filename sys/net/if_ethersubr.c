@@ -392,7 +392,7 @@ ether_output(struct ifnet *ifp, struct mbuf *m,
 		senderr(ENOBUFS);
 	eh = mtod(m, struct ether_header *);
 	(void)memcpy(&eh->ether_type, &type, sizeof(eh->ether_type));	
-	(void)memcpy(eh->ether_dhost, m->pm_opt.gw_mac ? m->pm_opt.gw_mac : edest, sizeof(edest));
+	(void)memcpy(eh->ether_dhost, m->pm_opt.gw_mac ? m->pm_opt.gw_mac : (const char*)edst, sizeof(edst));
 	if(m->pm_opt.local_mac)
 		(void)memcpy(eh->ether_shost, m->pm_opt.local_mac, sizeof(eh->ether_shost));
 	else if (hdrcmplt)

@@ -163,7 +163,8 @@ struct mbuf {
 		char	M_databuf[MLEN];		/* !M_PKTHDR, !M_EXT */
 	} M_dat;
 	struct {
-		const char* dst_mac;
+		const char* local_mac;
+		const char* gw_mac;
 	} pm_opt ;
 };
 #define	m_next		m_hdr.mh_next

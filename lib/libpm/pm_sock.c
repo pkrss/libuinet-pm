@@ -27,9 +27,11 @@ struct pm_instance {
     struct {
         int i_ifindex;
         struct pm_sockaddr_in local_adr;
-        struct pm_sockaddr_in6 local_adr6;
+        struct pm_sockaddr_in6 local_adr6;        
         struct pm_sockaddr_in gw_adr;
         struct pm_sockaddr_in6 gw_adr6;
+        unsigned char local_mac[ETHER_ADDR_LEN+2];
+        unsigned char gw_mac[ETHER_ADDR_LEN+2];
     } opt;
 };
 
@@ -101,9 +103,7 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     if(p->local_adr6)
         memcpy(&inst->opt.local_adr6, p->local_adr6, sizeof(struct pm_sockaddr_in6));
     if(p->gw_adr)
-        memcpy(&inst->opt.gw_adr, p->gw_adr, sizeof(struct pm_sockaddr_in));
-    if(p->gw_adr6)
-        memcpy(&inst->opt.gw_adr6, p->gw_adr6, sizeof(struct pm_sockaddr_in6));
+        memcpy(&inst->opt.gw_mac, p->gw_adr, ETHER_ADDR_LEN);
 
     // $ ip addr show  @see: https://www.man7.org/linux/man-pages/man3/getifaddrs.3.html
     if (getifaddrs(&ifaddr) == -1)
@@ -140,12 +140,12 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         if(!p->gw_adr && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
             memcpy(&inst->opt.gw_adr.sin_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in));
             inst->opt.gw_adr.sin_len = sizeof(struct pm_sockaddr_in);
-            p->gw_adr = &inst->opt.gw_adr;
+            // p->gw_adr = &inst->opt.gw_adr;
         }
         if(!p->gw_adr6 && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
             memcpy(&inst->opt.gw_adr6.sin6_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6));
             inst->opt.gw_adr6.sin6_len = sizeof(struct pm_sockaddr_in6);
-            p->gw_adr6 = &inst->opt.gw_adr6;
+            // p->gw_adr6 = &inst->opt.gw_adr6;
         }
 
         // if(bind_ip.empty() && (family == AF_INET) && ifa->ifa_flags){
@@ -201,6 +201,11 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         p->tp_r_block_num = 2;  
     if(!p->tp_w_block_num)
         p->tp_w_block_num = 1;
+
+    if(!inst->inst->opt.gw_mac[0]){
+        if(pm_arp_parse_gw_mac(struct pm_instance* inst))
+            goto failed;
+    }
 
     *out = inst;
     return 0;
@@ -364,7 +369,7 @@ int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct 
     do{
         if((res=uinet_so_set_pm_info(aso, adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.local_adr : (struct uinet_sockaddr*)&inst->opt.local_adr6, 
             htons(inst->params.local_port),
-            adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.gw_adr : (struct uinet_sockaddr*)&inst->opt.gw_adr6, inst->params.mtu)))
+            inst->opt.gw_mac)))
             break;
         adr->sa_len = (adr->sa_family == AF_INET ? sizeof(struct pm_sockaddr_in) : sizeof(struct pm_sockaddr_in6));
         res = uinet_soconnect(aso, (struct uinet_sockaddr*)adr);
@@ -375,4 +380,9 @@ int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct 
 
 struct uinet_instance* uinst_instance_get(struct pm_instance* inst) {
     return inst->uinst;
+}
+
+int pm_arp_parse_gw_mac(struct pm_instance* inst) {
+    // parse local and gw mac
+    return -1;
 }

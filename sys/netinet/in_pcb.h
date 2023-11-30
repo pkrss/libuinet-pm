@@ -248,7 +248,8 @@ struct inpcb {
 	struct rwlock	inp_lock;
 	struct {		
 		int	flags;		// inpcb_pm_flags_enabled|...
-		struct uinet_sockaddr* gw_dst; // gateway/broadcast dst
+		const char* local_mac; // local mac dst
+		const char* gw_mac; // gateway/broadcast mac dst
 		int mtu;
 		int (*ip_output)(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
 	} pm_opt;

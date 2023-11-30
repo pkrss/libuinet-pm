@@ -79,8 +79,8 @@ struct pm_params {
 	// const char* gateway_mac; // opt, 
     struct pm_sockaddr_in* local_adr; // opt
     struct pm_sockaddr_in6* local_adr6; // opt
-    struct pm_sockaddr_in* gw_adr; // opt
-    struct pm_sockaddr_in6* gw_adr6; // opt
+    uint8_t* local_mac; // opt 6 bytes, eg: 01-02-03-04-05-06
+    uint8_t* gw_mac; // opt 6 bytes, eg: 01-02-03-04-05-06
 };
 
 struct pm_instance;
@@ -95,6 +95,9 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
 // int pm_bind(struct pm_socket *sck, struct pm_sockaddr *nam);
 int pm_close(struct pm_socket *sck);
 int pm_connect(struct pm_socket *sck, struct pm_sockaddr *adr);
+
+// parse local and gw mac
+int pm_arp_parse_gw_mac(struct pm_instance* inst);
 
 struct uinet_socket;
 struct uinet_instance;

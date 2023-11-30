@@ -2236,19 +2236,21 @@ uinet_pd_drop(struct uinet_pd_list *pkts)
 	}
 }
 
-int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_sockaddr* local_adr, int lport, struct uinet_sockaddr* gw_adr, int mtu){
+int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_sockaddr* local_adr, int lport, const char* local_mac, const char* gw_mac, int mtu){
 	
 	struct socket *so = (struct socket *)uso;
 	struct inpcb *inp = sotoinpcb(so);
-	// struct tcpcb *tp = intotcpcb(inp);
-	// struct inpcb *inp = tp->t_inpcb
+
 	inp->inp_lport = lport;
 	if(local_adr->sa_family == AF_INET)
 		memcpy(&inp->inp_laddr, &((struct sockaddr_in*)local_adr)->sin_addr, sizeof(struct in_addr));
 	else
 		memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)local_adr)->sin6_addr, sizeof(struct in6_addr));
 	inp->pm_opt.flags |= inpcb_pm_flags_enabled | inpcb_pm_flags_no_lock;
-	inp->pm_opt.gw_dst = gw_adr;
+	if(local_mac && local_mac[0])
+		inp->pm_opt.local_mac = local_mac;
+	if(gw_mac && gw_mac[0])
+		inp->pm_opt.gw_mac = gw_mac;
 	inp->pm_opt.mtu = mtu;
 	extern	int  ether_output(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
 	inp->pm_opt.ip_output = &ether_output;

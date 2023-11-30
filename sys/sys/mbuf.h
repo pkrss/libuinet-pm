@@ -162,6 +162,9 @@ struct mbuf {
 		} MH;
 		char	M_databuf[MLEN];		/* !M_PKTHDR, !M_EXT */
 	} M_dat;
+	struct {
+		const char* dst_mac;
+	} pm_opt ;
 };
 #define	m_next		m_hdr.mh_next
 #define	m_len		m_hdr.mh_len

@@ -211,7 +211,9 @@ ether_output(struct ifnet *ifp, struct mbuf *m,
 			break;
 		}
 #endif
-		if (lle != NULL && (lle->la_flags & LLE_VALID))
+		if (m->pm_opt.gw_mac)
+			break;
+		else if (lle != NULL && (lle->la_flags & LLE_VALID))
 			memcpy(edst, &lle->ll_addr.mac16, sizeof(edst));
 		else
 			error = arpresolve(ifp, rt0, m, dst, edst, &lle);
@@ -258,7 +260,9 @@ ether_output(struct ifnet *ifp, struct mbuf *m,
 			break;
 		}
 #endif
-		if (lle != NULL && (lle->la_flags & LLE_VALID))
+		if (m->pm_opt.gw_mac)
+			break;
+		else if (lle != NULL && (lle->la_flags & LLE_VALID))
 			memcpy(edst, &lle->ll_addr.mac16, sizeof(edst));
 		else
 			error = nd6_storelladdr(ifp, m, dst, (u_char *)edst, &lle);
@@ -387,15 +391,17 @@ ether_output(struct ifnet *ifp, struct mbuf *m,
 	if (m == NULL)
 		senderr(ENOBUFS);
 	eh = mtod(m, struct ether_header *);
-	(void)memcpy(&eh->ether_type, &type,
-		sizeof(eh->ether_type));
-	(void)memcpy(eh->ether_dhost, edst, sizeof (edst));
-	if (hdrcmplt)
-		(void)memcpy(eh->ether_shost, esrc,
-			sizeof(eh->ether_shost));
+	(void)memcpy(&eh->ether_type, &type, sizeof(eh->ether_type));	
+	(void)memcpy(eh->ether_dhost, m->pm_opt.gw_mac ? m->pm_opt.gw_mac : edest, sizeof(edest));
+	if(m->pm_opt.local_mac)
+		(void)memcpy(eh->ether_shost, m->pm_opt.local_mac, sizeof(eh->ether_shost));
+	else if (hdrcmplt)
+		(void)memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
 	else
-		(void)memcpy(eh->ether_shost, IF_LLADDR(ifp),
-			sizeof(eh->ether_shost));
+		(void)memcpy(eh->ether_shost, IF_LLADDR(ifp), sizeof(eh->ether_shost));
+
+	if(!ifp)
+		goto out_here;
 
 #ifdef PROMISCUOUS_INET
 linkhdr_added:
@@ -479,7 +485,7 @@ bad:			if (m != NULL)
 		if (m == NULL)
 			return (0);
 	}
-
+out_here:
 	/* Continue with link-layer output */
 	return ether_output_frame(ifp, m);
 }

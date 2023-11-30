@@ -295,6 +295,8 @@ again:
 		isbroadcast = 0;
 		if_hwa = (CSUM_TCP_IPV6 | CSUM_UDP_IPV6 | CSUM_SCTP_IPV6 | CSUM_IP | CSUM_TCP | CSUM_UDP | CSUM_SCTP | CSUM_IP_FRAGS | CSUM_FRAGMENT);
 		if_output = inp->pm_opt.ip_output;
+		m->pm_opt.local_mac = inp->pm_opt.local_mac;
+		m->pm_opt.gw_mac = inp->pm_opt.gw_mac;
 		// goto sendit;
 	} else if (flags & IP_SENDONES) {
 		if ((ia = ifatoia(ifa_ifwithbroadaddr(sintosa(dst)))) == NULL &&

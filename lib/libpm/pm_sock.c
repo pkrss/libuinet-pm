@@ -413,15 +413,22 @@ int pm_connect(struct pm_socket *sck, struct pm_sockaddr *adr){
 
 int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct pm_sockaddr *adr){
     int res;
+    struct uinet_pm_so_info info;
 
     do{
-        if((res=uinet_so_set_pm_info(aso, adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.local_adr : (struct uinet_sockaddr*)&inst->opt.local_adr6, 
-            htons(inst->params.local_port),
-            (const char*)inst->opt.local_mac,
-            (const char*)inst->opt.gw_mac,
-            inst->params.mtu)))
-            break;
         adr->sa_len = (adr->sa_family == AF_INET ? sizeof(struct pm_sockaddr_in) : sizeof(struct pm_sockaddr_in6));
+
+        memset(&info, 0, sizeof(struct uinet_pm_so_info));
+        info.local_adr = (adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.local_adr : (struct uinet_sockaddr*)&inst->opt.local_adr6);
+	    info.lport = htons(inst->params.local_port);
+        info.local_mac = (const char*)inst->opt.local_mac;
+        info.gw_mac = (const char*)inst->opt.gw_mac;
+        info.mtu = inst->params.mtu;
+        // info.want_send)(void** buf, size_t n, struct uinet_pm_so_info* arg); // opt, prepare send buf, buf is out send buf
+        // info.do_send)(const void* buf, size_t n, struct uinet_pm_so_info* arg); // opt, call user send
+
+        if((res=uinet_so_set_pm_info(aso, &info)))
+            break;
         res = uinet_soconnect(aso, (struct uinet_sockaddr*)adr);
     } while(0);
 

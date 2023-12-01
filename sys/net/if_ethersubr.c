@@ -211,7 +211,7 @@ ether_output(struct ifnet *ifp, struct mbuf *m,
 			break;
 		}
 #endif
-		if (m->pm_opt.gw_mac)
+		if (m->pm_opt && m->pm_opt->gw_mac)
 			break;
 		else if (lle != NULL && (lle->la_flags & LLE_VALID))
 			memcpy(edst, &lle->ll_addr.mac16, sizeof(edst));
@@ -260,7 +260,7 @@ ether_output(struct ifnet *ifp, struct mbuf *m,
 			break;
 		}
 #endif
-		if (m->pm_opt.gw_mac)
+		if (m->pm_opt && m->pm_opt->gw_mac)
 			break;
 		else if (lle != NULL && (lle->la_flags & LLE_VALID))
 			memcpy(edst, &lle->ll_addr.mac16, sizeof(edst));
@@ -392,9 +392,9 @@ ether_output(struct ifnet *ifp, struct mbuf *m,
 		senderr(ENOBUFS);
 	eh = mtod(m, struct ether_header *);
 	(void)memcpy(&eh->ether_type, &type, sizeof(eh->ether_type));	
-	(void)memcpy(eh->ether_dhost, m->pm_opt.gw_mac ? m->pm_opt.gw_mac : (const char*)edst, sizeof(edst));
-	if(m->pm_opt.local_mac)
-		(void)memcpy(eh->ether_shost, m->pm_opt.local_mac, sizeof(eh->ether_shost));
+	(void)memcpy(eh->ether_dhost, m->pm_opt && m->pm_opt->gw_mac ? m->pm_opt->gw_mac : (const char*)edst, sizeof(edst));
+	if(m->pm_opt && m->pm_opt->local_mac)
+		(void)memcpy(eh->ether_shost, m->pm_opt->local_mac, sizeof(eh->ether_shost));
 	else if (hdrcmplt)
 		(void)memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
 	else
@@ -516,7 +516,7 @@ ether_output_frame(struct ifnet *ifp, struct mbuf *m)
 	 * Queue message on interface, update output statistics if
 	 * successful, and start output if interface not yet active.
 	 */
-	return ((ifp->if_transmit)(ifp, m));
+	return (m->pm_opt && m->pm_opt->if_transmit ? *m->pm_opt->if_transmit : ifp->if_transmit)(ifp, m);
 }
 
 #if defined(INET) || defined(INET6)

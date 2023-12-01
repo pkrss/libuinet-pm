@@ -638,7 +638,12 @@ uinet_sobind(struct uinet_socket *so, struct uinet_sockaddr *nam)
 int
 uinet_soclose(struct uinet_socket *so)
 {
-	return soclose((struct socket *)so);
+	struct socket * s = (struct socket *)so;
+	if(s->pm_opt){
+		free(s->pm_opt);
+		s->pm_opt = NULL;
+	}
+	return soclose(s);
 }
 
 
@@ -669,7 +674,7 @@ uinet_soconnect(struct uinet_socket *uso, struct uinet_sockaddr *nam)
 		goto done1;
 	}
 
-	if(inp->pm_opt.flags & inpcb_pm_flags_enabled)
+	if(inp->pm_opt->flags & mbuf_pm_flags_enabled)
 		goto done1;
 
 	CURVNET_SET(so->so_vnet);
@@ -2236,24 +2241,73 @@ uinet_pd_drop(struct uinet_pd_list *pkts)
 	}
 }
 
-int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_sockaddr* local_adr, int lport, const char* local_mac, const char* gw_mac, int mtu){
+int uinet_if_transmit(struct ifnet *ifp, struct mbuf *m)
+{
+	int res = ENOBUFS;
+	struct uinet_pm_so_info* info;
+	struct inpcb *inp;
+	void* snd_buf = NULL;
+
+	do{
+		if(!m->pm_opt || !(info = m->pm_opt->user))
+			break;
+
+		inp = sotoinpcb((struct socket *)info->uso);
+
+		if(inp->want_send && (0 != (*info->want_send)(&snd_buf, m->m_pkthdr.len, info)))
+			break;
+		
+		// @todo: need optimize to zero copy
+		m_copydata(m, 0, m->m_pkthdr.len, (caddr_t)snd_buf);
+
+		if(inp->do_send && (0 != (*info->do_send)(snd_buf, m->m_pkthdr.len, info)))
+			break;
+
+		res = 0;
+	}while(0);
+	
+	return res;
+}
+
+int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_pm_so_info* info){
 	
 	struct socket *so = (struct socket *)uso;
-	struct inpcb *inp = sotoinpcb(so);
+	// struct inpcb *inp = sotoinpcb(so);
+	struct mbuf_pm_opt* pm_opt;
 
-	inp->inp_lport = lport;
+	info->uso = uso;
+
+	// set addr to our addr, because uinet default use vnet route and addr, but our didn't want to use them
+	inp->inp_lport = info->lport;
 	if(local_adr->sa_family == AF_INET)
-		memcpy(&inp->inp_laddr, &((struct sockaddr_in*)local_adr)->sin_addr, sizeof(struct in_addr));
+		memcpy(&inp->inp_laddr, &((struct sockaddr_in*)info->local_adr)->sin_addr, sizeof(struct in_addr));
 	else
-		memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)local_adr)->sin6_addr, sizeof(struct in6_addr));
-	inp->pm_opt.flags |= inpcb_pm_flags_enabled | inpcb_pm_flags_no_lock;
-	if(local_mac && (*(const int64_t*)local_mac & 0xFFFFFFFFFFFF0000))
-		inp->pm_opt.local_mac = local_mac;
-	if(gw_mac && (*(const int64_t*)gw_mac & 0xFFFFFFFFFFFF0000))
-		inp->pm_opt.gw_mac = gw_mac;
-	inp->pm_opt.mtu = mtu;
+		memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)info->local_adr)->sin6_addr, sizeof(struct in6_addr));
+
+	if(!so->pm_opt) {
+		so->pm_opt = (struct mbuf_pm_opt*)malloc(sizeof(struct mbuf_pm_opt));
+		memset(so->pm_opt, 0, sizeof(struct mbuf_pm_opt));
+	}
+
+	sotoinpcb(so)->pm_opt = pm_opt = so->pm_opt;
+
+	pm_opt->flags |= mbuf_pm_flags_enabled;
+
+	if(!info->so_with_lock) {
+		pm_opt->flags |= mbuf_pm_flags_no_lock;
+		so->so_non_lock = 1;
+	}
+
+	// check 6 bytes mac is valid
+	if(info->local_mac && (*(const int64_t*)info->local_mac & 0xFFFFFFFFFFFF0000))
+		pm_opt->local_mac = info->local_mac;
+	if(info->gw_mac && (*(const int64_t*)info->gw_mac & 0xFFFFFFFFFFFF0000))
+		pm_opt->gw_mac = info->gw_mac;
+	pm_opt->mtu = info->mtu;
 	// int  ether_output(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
-	inp->pm_opt.ip_output = &ether_output;
+	pm_opt->ip_output = &ether_output; // set to our cb functions
+	pm_opt->if_transmit = &uinet_if_transmit;
+	pm_opt->user = (void*)info;
 
 	return 0;
 }

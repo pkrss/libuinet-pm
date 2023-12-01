@@ -1111,7 +1111,7 @@ tcp_connect(struct tcpcb *tp, struct sockaddr *nam, struct thread *td)
 	u_short lport;
 	int error;
 
-	if(inp->pm_opt.flags & inpcb_pm_flags_enabled) {
+	if(m->pm_opt && (inp->pm_opt->flags & mbuf_pm_flags_enabled)) {
 		if(nam->sa_family == AF_INET)
 			inp->inp_faddr = ((struct sockaddr_in *)nam)->sin_addr;
 		else

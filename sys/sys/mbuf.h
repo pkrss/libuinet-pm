@@ -146,6 +146,19 @@ struct m_ext {
 	int		 ext_type;	/* type of external storage */
 };
 
+#define mbuf_pm_flags_enabled 0x01 // run by pm_sock mode
+#define mbuf_pm_flags_no_lock 0x02 // run no lock mode
+
+struct mbuf_pm_opt {
+	int	flags;		// mbuf_pm_flags_enabled|...
+	const char* local_mac; // local mac dst
+	const char* gw_mac; // gateway/broadcast mac dst
+	int mtu;
+	int (*ip_output)(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
+	int (*if_transmit)(struct ifnet *ifp, struct mbuf *m);
+	void* user;
+};
+
 /*
  * The core of the mbuf object along with some shortcut defines for practical
  * purposes.
@@ -162,10 +175,7 @@ struct mbuf {
 		} MH;
 		char	M_databuf[MLEN];		/* !M_PKTHDR, !M_EXT */
 	} M_dat;
-	struct {
-		const char* local_mac;
-		const char* gw_mac;
-	} pm_opt ;
+	struct mbuf_pm_opt* pm_opt; // our opt arg
 };
 #define	m_next		m_hdr.mh_next
 #define	m_len		m_hdr.mh_len

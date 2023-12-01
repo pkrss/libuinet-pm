@@ -148,6 +148,9 @@ struct socket {
 #define SOMAXUSERCTX 1
 	void *so_user_ctx[SOMAXUSERCTX]; /* (a) each pointer managed by user */
 	struct socket *so_passive_peer;	/* (a) peer socket when performing passive reassembly */
+
+	struct mbuf_pm_opt* pm_opt; // our opt arg
+	int so_non_lock;    /* non lock flag */
 };
 
 
@@ -176,9 +179,9 @@ VNET_DECLARE(struct mtx, accept_mtx);
  * locking for the socket code.
  */
 #define	SOCK_MTX(_so)			SOCKBUF_MTX(&(_so)->so_rcv)
-#define	SOCK_LOCK(_so)			SOCKBUF_LOCK(&(_so)->so_rcv)
+#define	SOCK_LOCK(_so)			(_so->so_non_lock ? (void)0 : SOCKBUF_LOCK(&(_so)->so_rcv))
 #define	SOCK_OWNED(_so)			SOCKBUF_OWNED(&(_so)->so_rcv)
-#define	SOCK_UNLOCK(_so)		SOCKBUF_UNLOCK(&(_so)->so_rcv)
+#define	SOCK_UNLOCK(_so)		(_so->so_non_lock ? (void)0 : SOCKBUF_UNLOCK(&(_so)->so_rcv))
 #define	SOCK_LOCK_ASSERT(_so)		SOCKBUF_LOCK_ASSERT(&(_so)->so_rcv)
 
 #endif

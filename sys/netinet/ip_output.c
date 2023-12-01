@@ -287,16 +287,15 @@ again:
 	 * interface is specified by the broadcast address of an interface,
 	 * or the destination address of a ptp interface.
 	 */
-	if(inp->pm_opt.flags & inpcb_pm_flags_enabled){
-		// ip->ip_dst.s_addr = inp->pm_opt.gw_dst->s_addr;
-		// dst = inp->pm_opt.gw_dst;
-		mtu = (inp->pm_opt.mtu ? inp->pm_opt.mtu : 1500);
+	if(inp->pm_opt && (inp->pm_opt->flags & mbuf_pm_flags_enabled)){
+		// ip->ip_dst.s_addr = inp->pm_opt->gw_dst->s_addr;
+		// dst = inp->pm_opt->gw_dst;
+		mtu = (inp->pm_opt->mtu ? inp->pm_opt->mtu : 1500);
 		ip->ip_ttl = 1;
 		isbroadcast = 0;
 		if_hwa = (CSUM_TCP_IPV6 | CSUM_UDP_IPV6 | CSUM_SCTP_IPV6 | CSUM_IP | CSUM_TCP | CSUM_UDP | CSUM_SCTP | CSUM_IP_FRAGS | CSUM_FRAGMENT);
-		if_output = inp->pm_opt.ip_output;
-		m->pm_opt.local_mac = inp->pm_opt.local_mac;
-		m->pm_opt.gw_mac = inp->pm_opt.gw_mac;
+		if_output = inp->pm_opt->ip_output;
+		m->pm_opt = inp->pm_opt;
 		// goto sendit;
 	} else if (flags & IP_SENDONES) {
 		if ((ia = ifatoia(ifa_ifwithbroadaddr(sintosa(dst)))) == NULL &&
@@ -393,7 +392,7 @@ again:
 		if (rte->rt_rmx.rmx_mtu > ifp->if_mtu)
 			rte->rt_rmx.rmx_mtu = ifp->if_mtu;
 		mtu = rte->rt_rmx.rmx_mtu;
-	} else if(!(inp->pm_opt.flags & inpcb_pm_flags_enabled)){
+	} else if(!m->pm_opt || !(inp->pm_opt->flags & mbuf_pm_flags_enabled)){
 		mtu = ifp->if_mtu;
 	}
 	/* Catch a possible divide by zero later. */

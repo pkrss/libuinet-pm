@@ -136,9 +136,6 @@ struct in_conninfo {
 #define	inc6_faddr	inc_ie.ie6_faddr
 #define	inc6_laddr	inc_ie.ie6_laddr
 
-#define inpcb_pm_flags_enabled 0x01 // run by pm_sock mode
-#define inpcb_pm_flags_no_lock 0x02 // run no lock mode
-
 struct	icmp6_filter;
 
 /*-
@@ -246,13 +243,7 @@ struct inpcb {
 	struct llentry	*inp_lle;	/* cached L2 information */
 	struct rtentry	*inp_rt;	/* cached L3 information */
 	struct rwlock	inp_lock;
-	struct {		
-		int	flags;		// inpcb_pm_flags_enabled|...
-		const char* local_mac; // local mac dst
-		const char* gw_mac; // gateway/broadcast mac dst
-		int mtu;
-		int (*ip_output)(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
-	} pm_opt;
+	struct mbuf_pm_opt* pm_opt; // our opt arg
 };
 #define	inp_fibnum	inp_inc.inc_fibnum
 #define	inp_fport	inp_inc.inc_fport

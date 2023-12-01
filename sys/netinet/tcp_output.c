@@ -805,7 +805,7 @@ send:
 	 */
 	KASSERT(len >= 0, ("[%s:%d]: len < 0", __func__, __LINE__));
 
-	if(0){ // tp->t_inpcb->pm_opt.
+	if(0){ // tp->t_inpcb->pm_opt->
 		// struct mb_args args;
 		// args.flags = M_PKTHDR;
 		// args.type = MT_DATA;

@@ -60,8 +60,7 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     struct pm_instance* inst;
     int fd = -1;
     struct ifreq ifr;
-    char* s = NULL, *s2;
-    FILE *fp = NULL;
+    char* s;
     // char host[NI_MAXHOST];
 
     inst = (struct pm_instance*)((p && p->mm_alloc ? p->mm_alloc : malloc)(sizeof(struct pm_instance)));
@@ -113,9 +112,11 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     if(p->local_adr6)
         memcpy(&inst->opt.local_adr6, p->local_adr6, sizeof(struct pm_sockaddr_in6));
     if(p->local_mac)
-        memcpy(&inst->opt.local_mac, p->local_mac, ETH_ALEN);
+        pm_utils_mac_from_s(inst->opt.local_mac, p->local_mac);
+        // memcpy(&inst->opt.local_mac, p->local_mac, ETH_ALEN);
     if(p->gw_mac)
-        memcpy(&inst->opt.gw_mac, p->gw_mac, ETH_ALEN);
+        pm_utils_mac_from_s(inst->opt.gw_mac, p->gw_mac);
+        // memcpy(&inst->opt.gw_mac, p->gw_mac, ETH_ALEN);
 
     // $ ip addr show  @see: https://www.man7.org/linux/man-pages/man3/getifaddrs.3.html
     if (getifaddrs(&ifaddr) == -1)
@@ -208,43 +209,38 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     do {
         strcpy(ifr.ifr_name, p->netdev);
 
-        if(!inst->opt.local_mac[0]) {
+        if(pm_utils_is_mac_empty(inst->opt.local_mac)) {
             if (ioctl(fd, SIOCGIFHWADDR, &ifr) == -1)
                 break;
             memcpy(inst->opt.local_mac, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
         }
 
-        if(!inst->opt.gw_mac[0]) {
-            // if arp not working, please ping it's ip first
-            
-            s = (char*)p->mm_alloc(1028);
-            sprintf(s, "arp -n | grep %s", p->netdev);
-            if ((fp = popen(s, "r")) == NULL) {
-                p->log_printf("failed to run command%s\n", s);
-                goto failed;
-            }
-
-            s[1024] = 0;
-            s[0] = 0;
-            fgets(s, 1024, fp);
-            pclose(fp);
-            fp = NULL;
-            
-            s2 = strchr(s, ':');
-            while(*(s2-1)!=' ')
-                --s2;
-
-            res = sscanf(s2,"%2x:%2x:%2x:%2x:%2x:%2x", &inst->opt.gw_mac[0], &inst->opt.gw_mac[1], &inst->opt.gw_mac[2],&inst->opt.gw_mac[3],&inst->opt.gw_mac[4],&inst->opt.gw_mac[5]);
-            if(res != 5 ){
-                p->log_printf("failed to parse gw mac%s\n", s2);
-                goto failed;
-            }
-            res = 0;
-        }
-
         if(!p->mtu) {
             if (ioctl(fd, SIOCGIFMTU, &ifr) != -1)
                 p->mtu = ifr.ifr_mtu;
+        }
+
+        if(pm_utils_is_mac_empty(inst->opt.gw_mac)) {
+            // if arp had empty response, please ping gw's ip first
+            s = (char*)p->mm_alloc(128);
+            // sprintf(s, "arp -n | grep %s | awk '{print $3}' | tr -d :", p->netdev);
+            // if((res = pm_utils_get_cmd_result(s, s, 128)) == 0){
+            //     n64 = 0;
+            //     if((res = sscanf(s, "%lx", &n64)) == 1){
+            //         inst->opt.gw_mac[0] = (n64 >> 10) & 0xff;
+            //         inst->opt.gw_mac[1] = (n64 >> 8) & 0xff;
+            //         inst->opt.gw_mac[2] = (n64 >> 6) & 0xff;
+            //         inst->opt.gw_mac[3] = (n64 >> 4) & 0xff;
+            //         inst->opt.gw_mac[4] = (n64 >> 2) & 0xff;
+            //         inst->opt.gw_mac[5] = (n64) & 0xff;   
+            //     }
+            // }
+            sprintf(s, "arp -n | grep %s | awk '{print $3}'", p->netdev);
+            if((res = pm_utils_get_cmd_result(s, s, 128)) == 0)
+                pm_utils_mac_from_s(inst->opt.gw_mac, s);
+            p->mm_free(s);
+            s = NULL;
+            res = 0;
         }
     } while(0);
 
@@ -258,11 +254,6 @@ failed:
     if (fd!=-1) {
         close(fd);
         fd = -1;
-    }
-
-    if(s){
-        p->mm_free(s);
-        s = NULL;
     }
 
     if(res)
@@ -446,29 +437,28 @@ struct uinet_instance* uinst_instance_get(struct pm_instance* inst) {
 //     return -1;
 // }
 
-// int pm_get_cmd_result(struct pm_instance* inst, const char* cmd, const char* must_content){
-//     FILE *fp;
-//     char path[1035];
-//     int res = -1;
+int pm_utils_get_cmd_result(const char* cmd, char* s, size_t s_len){
+    FILE* fp;
+    if ((fp = popen(cmd, "r")) == NULL)
+        return -1;
+    s[s_len-1] = 0;
+    cmd = fgets(s, s_len-1, fp);
+    pclose(fp);
+    fp = NULL;
+    return cmd ? 0 : -1;
+}
 
-//     /* Open the command for reading. */
-//     fp = popen(cmd, "r");
-//     if (fp == NULL) {
-//         inst->log_printf("failed to run command%s\n", cmd);
-//         return -1;
-//     }
+int pm_utils_mac_from_s(uint8_t* dst_mac, const char* mac_s){
+    int i1,i2,i3,i4,i5,i6;
 
-//     path[sizeof(path)-1] = 0;
+    if(sscanf(mac_s, "%x:%x:%x:%x:%x:%x", &i1, &i2, &i3, &i4, &i5, &i6) != 6)
+        return -1;
 
-//     /* Read the output a line at a time - output it. */
-//     while (fgets(path, sizeof(path)-1, fp) != NULL) {
-//         if(!strstr(path, must_content))
-//             continue;
-//         res = 0;
-//         printf("%s", path);
-//     }
-
-//     /* close */
-//     pclose(fp);
-//     return res;
-// }
+    dst_mac[0] = (uint8_t)i1;
+    dst_mac[1] = (uint8_t)i2;
+    dst_mac[2] = (uint8_t)i3;
+    dst_mac[3] = (uint8_t)i4;
+    dst_mac[4] = (uint8_t)i5;
+    dst_mac[5] = (uint8_t)i6;
+    return 0;
+}

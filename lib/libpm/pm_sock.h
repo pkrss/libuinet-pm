@@ -79,8 +79,8 @@ struct pm_params {
 	// const char* gateway_mac; // opt, 
     struct pm_sockaddr_in* local_adr; // opt
     struct pm_sockaddr_in6* local_adr6; // opt
-    uint8_t* local_mac; // opt 6 bytes, eg: 01-02-03-04-05-06
-    uint8_t* gw_mac; // opt 6 bytes, eg: 01-02-03-04-05-06
+    const char* local_mac; // opt 6 bytes, eg: 01-02-03-04-05-06
+    const char* gw_mac; // opt 6 bytes, eg: 01-02-03-04-05-06
 };
 
 struct pm_instance;
@@ -103,6 +103,17 @@ struct uinet_socket;
 struct uinet_instance;
 int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct pm_sockaddr *adr);
 struct uinet_instance* uinst_instance_get(struct pm_instance* inst);
+
+// get shell one line result, 0:ok, -1: failed
+int pm_utils_get_cmd_result(const char* cmd, char* s, size_t s_len);
+
+// string mac to bin mac, 0:ok, else: failed.
+int pm_utils_mac_from_s(uint8_t* dst_mac, const char* mac_s);
+
+// inline int pm_utils_is_mac_empty(const uint8_t* mac) {
+// 	return !mac || !(*(const int64_t*)mac & 0xFFFFFFFFFFFF0000) ? -1 : 0;
+// }
+#define pm_utils_is_mac_empty(x) (!x || !(*(const int64_t*)x & 0xFFFFFFFFFFFF0000) ? -1 : 0)
 
 #ifdef __cplusplus
 }

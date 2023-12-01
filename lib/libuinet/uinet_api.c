@@ -2247,12 +2247,12 @@ int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_sockaddr* local_
 	else
 		memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)local_adr)->sin6_addr, sizeof(struct in6_addr));
 	inp->pm_opt.flags |= inpcb_pm_flags_enabled | inpcb_pm_flags_no_lock;
-	if(local_mac && local_mac[0])
+	if(local_mac && (*(const int64_t*)local_mac & 0xFFFFFFFFFFFF0000))
 		inp->pm_opt.local_mac = local_mac;
-	if(gw_mac && gw_mac[0])
+	if(gw_mac && (*(const int64_t*)gw_mac & 0xFFFFFFFFFFFF0000))
 		inp->pm_opt.gw_mac = gw_mac;
 	inp->pm_opt.mtu = mtu;
-	extern	int  ether_output(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
+	// int  ether_output(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
 	inp->pm_opt.ip_output = &ether_output;
 
 	return 0;

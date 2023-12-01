@@ -191,7 +191,6 @@ int main (int argc, char **argv)
 
 	do {
 		res = -1;
-    	res = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 			
 		memset(&dst_adr, 0, sizeof(dst_adr));
 		dst_adr.sin_family = dst_family;

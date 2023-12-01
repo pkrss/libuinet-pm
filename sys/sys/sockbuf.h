@@ -104,6 +104,8 @@ struct	sockbuf {
 	short	sb_flags;	/* (c/d) flags, see below */
 	int	(*sb_upcall)(struct socket *, void *, int); /* (c/d) */
 	void	*sb_upcallarg;	/* (c/d) */
+	
+	int so_non_lock;    /* non lock flag */
 };
 
 #ifdef _KERNEL
@@ -116,9 +118,9 @@ struct	sockbuf {
 #define	SOCKBUF_LOCK_INIT(_sb, _name)				\
 	VNET_MTX_INIT(SOCKBUF_MTX(_sb), _name, NULL, MTX_DEF)
 #define	SOCKBUF_LOCK_DESTROY(_sb)	VNET_MTX_DESTROY(SOCKBUF_MTX(_sb))
-#define	SOCKBUF_LOCK(_sb)		VNET_MTX_LOCK(SOCKBUF_MTX(_sb))
+#define	SOCKBUF_LOCK(_sb)		(_sb->so_non_lock ? (void)0 : VNET_MTX_LOCK(SOCKBUF_MTX(_sb)))
 #define	SOCKBUF_OWNED(_sb)		VNET_MTX_OWNED(SOCKBUF_MTX(_sb))
-#define	SOCKBUF_UNLOCK(_sb)		VNET_MTX_UNLOCK(SOCKBUF_MTX(_sb))
+#define	SOCKBUF_UNLOCK(_sb)		(_sb->so_non_lock ? (void)0 : VNET_MTX_UNLOCK(SOCKBUF_MTX(_sb)))
 #define	SOCKBUF_LOCK_ASSERT(_sb)	VNET_MTX_ASSERT(SOCKBUF_MTX(_sb), MA_OWNED)
 #define	SOCKBUF_UNLOCK_ASSERT(_sb)	VNET_MTX_ASSERT(SOCKBUF_MTX(_sb), MA_NOTOWNED)
 

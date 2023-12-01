@@ -2257,7 +2257,7 @@ int uinet_if_transmit(struct ifnet *ifp, struct mbuf *m)
 		if(inp->want_send && (0 != (*info->want_send)(&snd_buf, m->m_pkthdr.len, info)))
 			break;
 		
-		// @todo: need optimize to zero copy
+		// @todo: need optimize to zero copy, search: "MGETHDR(m,"
 		m_copydata(m, 0, m->m_pkthdr.len, (caddr_t)snd_buf);
 
 		if(inp->do_send && (0 != (*info->do_send)(snd_buf, m->m_pkthdr.len, info)))
@@ -2295,7 +2295,7 @@ int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_pm_so_info* info
 
 	if(!info->so_with_lock) {
 		pm_opt->flags |= mbuf_pm_flags_no_lock;
-		so->so_non_lock = 1;
+		so->so_snd.so_non_lock = so->so_rcv.so_non_lock = 1;
 	}
 
 	// check 6 bytes mac is valid

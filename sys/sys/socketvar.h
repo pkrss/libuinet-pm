@@ -150,7 +150,6 @@ struct socket {
 	struct socket *so_passive_peer;	/* (a) peer socket when performing passive reassembly */
 
 	struct mbuf_pm_opt* pm_opt; // our opt arg
-	int so_non_lock;    /* non lock flag */
 };
 
 

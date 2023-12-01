@@ -294,7 +294,8 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, in
     if((res = uinet_socreate(inst->uinst, family, &sck->aso, type, proto)) != 0)
         goto failed;
     if((sck->fd = socket(AF_PACKET, SOCK_RAW|SOCK_NONBLOCK, htons(ETH_P_ALL))) == -1)
-        goto failed;
+        // if((sck->fd = socket(family, SOCK_RAW|SOCK_NONBLOCK, IPPROTO_RAW)) == -1)
+            goto failed;
 
     res = TPACKET_V3;
     if(inst->params.tpacket_version == 1)

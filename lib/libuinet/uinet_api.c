@@ -2311,3 +2311,21 @@ int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_pm_so_info* info
 
 	return 0;
 }
+
+int uinet_so_parse_rcv(struct uinet_socket *uso, const void* msg, size_t n) {
+	
+	struct socket *so = (struct socket *)uso;
+	struct mbuf_pm_opt* pm_opt = so->pm_opt;
+	struct mbuf *m;
+
+	MGETHDR(m, M_DONTWAIT, MT_DATA);
+
+	
+
+
+
+	ether_demux(NULL, m);
+
+	return 0;
+}
+

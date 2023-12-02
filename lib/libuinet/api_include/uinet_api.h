@@ -273,6 +273,8 @@ struct uinet_pm_so_info {
 
 int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_pm_so_info* info);
 
+int uinet_so_parse_rcv(struct uinet_socket *uso, const void* msg, size_t n);
+
 #ifdef __cplusplus
 }
 #endif

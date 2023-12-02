@@ -640,7 +640,7 @@ uinet_soclose(struct uinet_socket *so)
 {
 	struct socket * s = (struct socket *)so;
 	if(s->pm_opt){
-		free(s->pm_opt);
+		free(s->pm_opt, M_DEVBUF);
 		s->pm_opt = NULL;
 	}
 	return soclose(s);
@@ -2254,13 +2254,13 @@ int uinet_if_transmit(struct ifnet *ifp, struct mbuf *m)
 
 		inp = sotoinpcb((struct socket *)info->uso);
 
-		if(inp->want_send && (0 != (*info->want_send)(&snd_buf, m->m_pkthdr.len, info)))
+		if(info->want_send && (0 != (*info->want_send)(&snd_buf, m->m_pkthdr.len, info)))
 			break;
 		
 		// @todo: need optimize to zero copy, search: "MGETHDR(m,"
 		m_copydata(m, 0, m->m_pkthdr.len, (caddr_t)snd_buf);
 
-		if(inp->do_send && (0 != (*info->do_send)(snd_buf, m->m_pkthdr.len, info)))
+		if(info->do_send && (0 != (*info->do_send)(snd_buf, m->m_pkthdr.len, info)))
 			break;
 
 		res = 0;
@@ -2272,20 +2272,20 @@ int uinet_if_transmit(struct ifnet *ifp, struct mbuf *m)
 int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_pm_so_info* info){
 	
 	struct socket *so = (struct socket *)uso;
-	// struct inpcb *inp = sotoinpcb(so);
+	struct inpcb *inp = sotoinpcb(so);
 	struct mbuf_pm_opt* pm_opt;
 
 	info->uso = uso;
 
 	// set addr to our addr, because uinet default use vnet route and addr, but our didn't want to use them
 	inp->inp_lport = info->lport;
-	if(local_adr->sa_family == AF_INET)
+	if(info->local_adr->sa_family == AF_INET)
 		memcpy(&inp->inp_laddr, &((struct sockaddr_in*)info->local_adr)->sin_addr, sizeof(struct in_addr));
 	else
 		memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)info->local_adr)->sin6_addr, sizeof(struct in6_addr));
 
 	if(!so->pm_opt) {
-		so->pm_opt = (struct mbuf_pm_opt*)malloc(sizeof(struct mbuf_pm_opt));
+		so->pm_opt = (struct mbuf_pm_opt*)malloc(sizeof(struct mbuf_pm_opt), M_DEVBUF, M_WAITOK);
 		memset(so->pm_opt, 0, sizeof(struct mbuf_pm_opt));
 	}
 

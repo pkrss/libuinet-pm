@@ -1010,14 +1010,14 @@ ether_demux(struct ifnet *ifp, struct mbuf *m)
 	struct llc *l;
 #endif
 
-	KASSERT(ifp != NULL, ("%s: NULL interface pointer", __func__));
+	// KASSERT(ifp != NULL, ("%s: NULL interface pointer", __func__));
 
 #if defined(INET) || defined(INET6)
 	/*
 	 * Allow dummynet and/or ipfw to claim the frame.
 	 * Do not do this for PROMISC frames in case we are re-entered.
 	 */
-	if (V_ip_fw_chk_ptr && V_ether_ipfw != 0 && !(m->m_flags & M_PROMISC)) {
+	if (ifp && V_ip_fw_chk_ptr && V_ether_ipfw != 0 && !(m->m_flags & M_PROMISC)) {
 		if (ether_ipfw_chk(&m, NULL, 0) == 0) {
 			if (m)
 				m_freem(m);	/* dropped; free mbuf chain */
@@ -1051,7 +1051,7 @@ ether_demux(struct ifnet *ifp, struct mbuf *m)
 	 * Pass promiscuously received frames to the upper layer if the user
 	 * requested this by setting IFF_PPROMISC. Otherwise, drop them.
 	 */
-	if ((ifp->if_flags & IFF_PPROMISC) == 0 && (m->m_flags & M_PROMISC)) {
+	if (ifp && (ifp->if_flags & IFF_PPROMISC) == 0 && (m->m_flags & M_PROMISC)) {
 		m_freem(m);
 		return;
 	}
@@ -1070,9 +1070,14 @@ ether_demux(struct ifnet *ifp, struct mbuf *m)
 	switch (ether_type) {
 #ifdef INET
 	case ETHERTYPE_IP:
-		if ((m = ip_fastforward(m)) == NULL)
+		if(m->pm_opt) {
+			ip_input(m);
 			return;
-		isr = NETISR_IP;
+		} else {
+			if ((m = ip_fastforward(m)) == NULL)
+				return;
+			isr = NETISR_IP;
+		}
 		break;
 
 	case ETHERTYPE_ARP:
@@ -1143,7 +1148,7 @@ discard:
 	 * hand the packet to it for last chance processing;
 	 * otherwise dispose of it.
 	 */
-	if (IFP2AC(ifp)->ac_netgraph != NULL) {
+	if (ifp && IFP2AC(ifp)->ac_netgraph != NULL) {
 		KASSERT(ng_ether_input_orphan_p != NULL,
 		    ("ng_ether_input_orphan_p is NULL"));
 		/*

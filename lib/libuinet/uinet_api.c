@@ -2277,19 +2277,21 @@ int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_pm_so_info* info
 
 	info->uso = uso;
 
-	// set addr to our addr, because uinet default use vnet route and addr, but our didn't want to use them
-	inp->inp_lport = info->lport;
-	if(info->local_adr->sa_family == AF_INET)
-		memcpy(&inp->inp_laddr, &((struct sockaddr_in*)info->local_adr)->sin_addr, sizeof(struct in_addr));
-	else
-		memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)info->local_adr)->sin6_addr, sizeof(struct in6_addr));
-
 	if(!so->pm_opt) {
 		so->pm_opt = (struct mbuf_pm_opt*)malloc(sizeof(struct mbuf_pm_opt), M_DEVBUF, M_WAITOK);
 		memset(so->pm_opt, 0, sizeof(struct mbuf_pm_opt));
 	}
 
 	sotoinpcb(so)->pm_opt = pm_opt = so->pm_opt;
+
+	// set addr to our addr, because uinet default use vnet route and addr, but our didn't want to use them
+	inp->inp_lport = info->lport;
+	if(info->local_adr->sa_family == AF_INET)
+		memcpy(&inp->inp_laddr, &((struct sockaddr_in*)info->local_adr)->sin_addr, sizeof(struct in_addr));
+	else
+		memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)info->local_adr)->sin6_addr, sizeof(struct in6_addr));
+		
+	pm_opt->local_adr = info->local_adr
 
 	pm_opt->flags |= mbuf_pm_flags_enabled;
 
@@ -2320,11 +2322,14 @@ int uinet_so_parse_rcv(struct uinet_socket *uso, const void* msg, size_t n) {
 
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 
-	
+	m_append(m, n, (c_caddr_t)msg);
 
-
+	m->pm_opt = pm_opt;
+	m->m_flags |= M_PKTHDR;
 
 	ether_demux(NULL, m);
+
+	// copy from so->so_rcv?
 
 	return 0;
 }

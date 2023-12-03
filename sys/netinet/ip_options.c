@@ -356,7 +356,7 @@ dropit:
 			cp[IPOPT_OFFSET] += sizeof(uint32_t);
 		}
 	}
-	if (forward && V_ipforwarding) {
+	if (!m->pm_opt && forward && V_ipforwarding) {
 		ip_forward(m, 1);
 		return (1);
 	}

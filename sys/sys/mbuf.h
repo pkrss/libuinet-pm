@@ -152,6 +152,7 @@ struct m_ext {
 struct mbuf_pm_opt {
 	int	flags;		// mbuf_pm_flags_enabled|...
 	const char* local_mac; // local mac dst
+	struct uinet_sockaddr* local_adr;
 	const char* gw_mac; // gateway/broadcast mac dst
 	int mtu;
 	int (*ip_output)(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);

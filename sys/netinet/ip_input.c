@@ -560,6 +560,9 @@ passin:
 	 */
 	if (hlen > sizeof (struct ip) && ip_dooptions(m, 0))
 		return;
+	
+	if(ip->pm_opt && ip->pm_opt->local_adr && (ip->pm_opt->local_adr->sa_family == AF_INET) && (ip->ip_dst.s_addr == ((struct sockaddr_in*)ip->pm_opt->local_adr)->sin_addr))
+		goto ours;
 
         /* greedy RSVP, snatches any PATH packet of the RSVP protocol and no
          * matter if it is destined to another node, or whether it is 
@@ -776,6 +779,11 @@ ours:
 	if (ip_ipsec_input(m))
 		goto bad;
 #endif /* IPSEC */
+
+	// if(m->pm_out){ // no need this?
+	// 	tcp_input(m, hlen);
+	// 	return;
+	// }
 
 	/*
 	 * Switch out to protocol's input routine.

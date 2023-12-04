@@ -638,12 +638,7 @@ uinet_sobind(struct uinet_socket *so, struct uinet_sockaddr *nam)
 int
 uinet_soclose(struct uinet_socket *so)
 {
-	struct socket * s = (struct socket *)so;
-	if(s->pm_opt){
-		free(s->pm_opt, M_DEVBUF);
-		s->pm_opt = NULL;
-	}
-	return soclose(s);
+	return soclose((struct socket *)sos);
 }
 
 
@@ -2239,98 +2234,5 @@ uinet_pd_drop(struct uinet_pd_list *pkts)
 		pool = uinet_pd_pool_get(cur_pool_id);
 		pool->free(free_group, free_group_count);
 	}
-}
-
-int uinet_if_transmit(struct ifnet *ifp, struct mbuf *m)
-{
-	int res = ENOBUFS;
-	struct uinet_pm_so_info* info;
-	struct inpcb *inp;
-	void* snd_buf = NULL;
-
-	do{
-		if(!m->pm_opt || !(info = m->pm_opt->user))
-			break;
-
-		inp = sotoinpcb((struct socket *)info->uso);
-
-		if(info->want_send && (0 != (*info->want_send)(&snd_buf, m->m_pkthdr.len, info)))
-			break;
-		
-		// @todo: need optimize to zero copy, search: "MGETHDR(m,"
-		m_copydata(m, 0, m->m_pkthdr.len, (caddr_t)snd_buf);
-
-		if(info->do_send && (0 != (*info->do_send)(snd_buf, m->m_pkthdr.len, info)))
-			break;
-
-		res = 0;
-	}while(0);
-	
-	return res;
-}
-
-int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_pm_so_info* info){
-	
-	struct socket *so = (struct socket *)uso;
-	struct inpcb *inp = sotoinpcb(so);
-	struct mbuf_pm_opt* pm_opt;
-
-	info->uso = uso;
-
-	if(!so->pm_opt) {
-		so->pm_opt = (struct mbuf_pm_opt*)malloc(sizeof(struct mbuf_pm_opt), M_DEVBUF, M_WAITOK);
-		memset(so->pm_opt, 0, sizeof(struct mbuf_pm_opt));
-	}
-
-	sotoinpcb(so)->pm_opt = pm_opt = so->pm_opt;
-
-	// set addr to our addr, because uinet default use vnet route and addr, but our didn't want to use them
-	inp->inp_lport = info->lport;
-	if(info->local_adr->sa_family == AF_INET)
-		memcpy(&inp->inp_laddr, &((struct sockaddr_in*)info->local_adr)->sin_addr, sizeof(struct in_addr));
-	else
-		memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)info->local_adr)->sin6_addr, sizeof(struct in6_addr));
-		
-	pm_opt->local_adr = info->local_adr
-
-	pm_opt->flags |= mbuf_pm_flags_enabled;
-
-	if(!info->so_with_lock) {
-		pm_opt->flags |= mbuf_pm_flags_no_lock;
-		so->so_snd.so_non_lock = so->so_rcv.so_non_lock = 1;
-	}
-
-	// check 6 bytes mac is valid
-	if(info->local_mac && (*(const int64_t*)info->local_mac & 0xFFFFFFFFFFFF0000))
-		pm_opt->local_mac = info->local_mac;
-	if(info->gw_mac && (*(const int64_t*)info->gw_mac & 0xFFFFFFFFFFFF0000))
-		pm_opt->gw_mac = info->gw_mac;
-	pm_opt->mtu = info->mtu;
-	// int  ether_output(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
-	pm_opt->ip_output = &ether_output; // set to our cb functions
-	pm_opt->if_transmit = &uinet_if_transmit;
-	pm_opt->user = (void*)info;
-
-	return 0;
-}
-
-int uinet_so_parse_rcv(struct uinet_socket *uso, const void* msg, size_t n) {
-	
-	struct socket *so = (struct socket *)uso;
-	struct mbuf_pm_opt* pm_opt = so->pm_opt;
-	struct mbuf *m;
-
-	MGETHDR(m, M_DONTWAIT, MT_DATA);
-
-	m_append(m, n, (c_caddr_t)msg);
-
-	m->pm_opt = pm_opt;
-	m->m_flags |= M_PKTHDR;
-
-	ether_demux(NULL, m);
-
-	// copy from so->so_rcv?
-
-	return 0;
 }
 

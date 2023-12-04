@@ -83,26 +83,39 @@ struct pm_params {
     const char* gw_mac; // opt 6 bytes, eg: 01-02-03-04-05-06
 };
 
-struct pm_instance;
-struct pm_socket;
+struct pm_so_info {
+	int family;
+	int type;
+	int proto;
+
+	struct uinet_socket *uso;
+	struct uinet_sockaddr* local_adr;
+	int lport;
+	const char* local_mac;
+	const char* gw_mac;
+	int mtu;
+	int so_with_lock;
+	int (*want_send)(void** buf, size_t n, struct pm_so_info* arg); // opt, prepare send buf, buf is out send buf
+	int (*do_send)(const void* buf, size_t n, struct pm_so_info* arg); // opt, call user send
+};
+
+// struct pm_instance;
+// struct pm_socket;
 
 int pm_init(struct pm_instance** out, struct pm_params* p);
 void pm_destroy(struct pm_instance* v);
 
-int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, int type, int proto);
+int pm_socreate(struct pm_instance* inst, struct pm_socket** out, struct pm_so_info* info);
 // void pm_shutdown(struct pm_socket* sck, int how);
 // int pm_accept(struct pm_socket *listener, struct pm_sockaddr **adr, struct pm_socket **aso);
 // int pm_bind(struct pm_socket *sck, struct pm_sockaddr *nam);
 int pm_close(struct pm_socket *sck);
 int pm_connect(struct pm_socket *sck, struct pm_sockaddr *adr);
-
+int pm_send(struct pm_socket *sck, struct pm_sockaddr *addr, const void *buf, size_t n, int flags);
+int pm_recv(struct pm_socket *sck, struct pm_sockaddr *addr, void *buf, size_t n, int *flagsp);
+int pm_shutdown(struct pm_socket *sck, int how);
 // parse local and gw mac
 // int pm_arp_parse_gw_mac(struct pm_instance* inst);
-
-struct uinet_socket;
-struct uinet_instance;
-int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct pm_sockaddr *adr);
-struct uinet_instance* uinst_instance_get(struct pm_instance* inst);
 
 // get shell one line result, 0:ok, -1: failed
 int pm_utils_get_cmd_result(const char* cmd, char* s, size_t s_len);

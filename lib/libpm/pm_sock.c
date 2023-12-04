@@ -19,9 +19,6 @@
 #include <ifaddrs.h>
 #include <sys/socket.h>
 
-/*
-gcc -fdiagnostics-color=always -g pm_sock.c -o pm_sock.o -L../libuinet/ -llibuinet.a -lssl -lcrypto
-*/
 struct pm_instance {
     struct pm_params params;
     uinet_instance_t uinst;
@@ -29,8 +26,8 @@ struct pm_instance {
         int i_ifindex;
         struct pm_sockaddr_in local_adr;
         struct pm_sockaddr_in6 local_adr6;        
-        struct pm_sockaddr_in gw_adr;
-        struct pm_sockaddr_in6 gw_adr6;
+        // struct pm_sockaddr_in gw_adr;
+        // struct pm_sockaddr_in6 gw_adr6;
         unsigned char local_mac[ETH_ALEN+2];
         unsigned char gw_mac[ETH_ALEN+2];
     } opt;
@@ -148,40 +145,13 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
             memcpy(&inst->opt.local_adr6.sin6_family, ifa->ifa_addr, sizeof(struct sockaddr_in6));
             inst->opt.local_adr6.sin6_len = sizeof(struct pm_sockaddr_in6);
         }
-        if(!inst->opt.gw_adr.sin_len && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
-            memcpy(&inst->opt.gw_adr.sin_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in));
-            inst->opt.gw_adr.sin_len = sizeof(struct pm_sockaddr_in);
-        }
-        if(!inst->opt.gw_adr6.sin6_len && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
-            memcpy(&inst->opt.gw_adr6.sin6_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6));
-            inst->opt.gw_adr6.sin6_len = sizeof(struct pm_sockaddr_in6);
-        }
-
-        // if(bind_ip.empty() && (family == AF_INET) && ifa->ifa_flags){
-        //     if ((res = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST)) != 0) {
-        //         p->log_printf("getnameinfo() failed: %s\n", gai_strerror(res));
-        //         continue;
-        //     }
-        //     bind_ip = host;
-        // } else if(bind_ip6.empty() && (family == AF_INET6)){
-        //     if ((res = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in6), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST)) != 0) {
-        //         p->log_printf("getnameinfo() failed: %s\n", gai_strerror(res));
-        //         continue;
-        //     }
-        //     bind_ip6 = host;
-        // } 
-        // if(gw_ip.empty() && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
-        //     if ((res = getnameinfo(ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST)) != 0) {
-        //         p->log_printf("getnameinfo() failed: %s\n", gai_strerror(res));
-        //         continue;
-        //     }
-        //     gw_ip = host;
-        // } else if(gw_ip6.empty() && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
-        //     if ((res = getnameinfo(ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST)) != 0) {
-        //         p->log_printf("getnameinfo() failed: %s\n", gai_strerror(res));
-        //         continue;
-        //     }
-        //     gw_ip6 = host;
+        // if(!inst->opt.gw_adr.sin_len && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
+        //     memcpy(&inst->opt.gw_adr.sin_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in));
+        //     inst->opt.gw_adr.sin_len = sizeof(struct pm_sockaddr_in);
+        // }
+        // if(!inst->opt.gw_adr6.sin6_len && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
+        //     memcpy(&inst->opt.gw_adr6.sin6_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6));
+        //     inst->opt.gw_adr6.sin6_len = sizeof(struct pm_sockaddr_in6);
         // }
     }
     freeifaddrs(ifaddr);
@@ -266,37 +236,66 @@ void pm_destroy(struct pm_instance* v){
     (v->params.mm_free ? v->params.mm_free : free)(v);
 }
 
-int pm_socreate(struct pm_instance* inst, struct pm_socket** out, int family, int type, int proto){
+int pm_socreate(struct pm_instance* inst, struct pm_socket** out, struct pm_so_info* info){
     int res;
     unsigned int i;
     struct sockaddr_ll my_addr;
     struct ifreq s_ifr;    
     struct tpacket_req3 req;
-    struct pm_socket* sck = (struct pm_socket*)inst->params.mm_alloc(sizeof(struct pm_socket));
+    struct pm_socket* sck;
+    struct mbuf_pm_opt* pm_opt;
+
+    sck = (struct pm_socket*)inst->params.mm_alloc(sizeof(struct pm_socket));
     memset(sck, 0, sizeof(struct pm_socket));
+    sck->fd = -1;
     sck->inst = inst;
-    // switch(family){
-    // case PF_INET:
-    //     family = UINET_PF_INET;
-    //     break;
-    // case PF_INET6:
-    //     family = UINET_PF_INET6;
-    //     break;
-    // }
-    // switch(type){
-    // case SOCK_STREAM:
-    //     type = UINET_SOCK_STREAM;
-    //     break;
-    // case SOCK_DGRAM:
-    //     type = UINET_SOCK_DGRAM;
-    //     break;
-    // }
-    if((res = uinet_socreate(inst->uinst, family, &sck->aso, type, proto)) != 0)
+    if((res = uinet_socreate(inst->uinst, info->family, &sck->aso, info->type, info->proto)) != 0)
         goto failed;
-    res = setuid(0);
-    if((sck->fd = socket(AF_PACKET, SOCK_RAW|SOCK_NONBLOCK, htons(ETH_P_ALL))) == -1) // ether_output
-        // if((sck->fd = socket(family, SOCK_RAW|SOCK_NONBLOCK, IPPROTO_RAW)) == -1) // ip_output
+
+    sotoinpcb(sck->aso)->pm_opt = sck->aso->pm_opt = pm_opt = (struct mbuf_pm_opt*)malloc(sizeof(struct mbuf_pm_opt), M_DEVBUF, M_WAITOK);
+    memset(pm_opt, 0, sizeof(struct mbuf_pm_opt));
+
+    pm_opt->user = malloc(sizeof(struct pm_so_info), M_DEVBUF, M_WAITOK);
+    memcpy(pm_opt->user, info, sizeof(struct pm_so_info));
+    info = pm_opt->user;
+
+	info->uso = uso;
+	pm_opt->flags |= mbuf_pm_flags_enabled;
+	if(!info->so_with_lock) {
+		pm_opt->flags |= mbuf_pm_flags_no_lock;
+		so->so_snd.so_non_lock = so->so_rcv.so_non_lock = 1;
+	}
+
+	// check 6 bytes mac is valid
+	if(info->local_mac && (*(const int64_t*)info->local_mac & 0xFFFFFFFFFFFF0000))
+		pm_opt->local_mac = info->local_mac;
+	if(info->gw_mac && (*(const int64_t*)info->gw_mac & 0xFFFFFFFFFFFF0000))
+		pm_opt->gw_mac = info->gw_mac;
+	pm_opt->mtu = info->mtu;
+	// int  ether_output(struct ifnet *, struct mbuf *, struct sockaddr *, struct route *);
+	pm_opt->ip_output = &ether_output; // set to our cb functions
+	pm_opt->if_transmit = &uinet_if_transmit;	
+
+    if(!info->lport)
+        info->lport = htons(inst->params.local_port);
+    if(!info->local_mac)
+        info->local_mac = (const char*)inst->opt.local_mac;
+    if(!info->gw_mac)
+        info->gw_mac = (const char*)inst->opt.gw_mac;
+    if(!info->mtu)
+        info->mtu = inst->params.mtu;
+    // info.want_send)(void** buf, size_t n, struct pm_so_info* arg); // opt, prepare send buf, buf is out send buf
+    // info.do_send)(const void* buf, size_t n, struct pm_so_info* arg); // opt, call user send
+        
+
+    // res = setuid(0);
+    if((sck->fd = socket(AF_PACKET, SOCK_RAW|SOCK_NONBLOCK, htons(ETH_P_ALL))) == -1) { // ether_output
+#if !defined(NDEBUG) // only for debug
+        if((sck->fd = socket(info->family, SOCK_RAW|SOCK_NONBLOCK, IPPROTO_RAW)) == -1)
+        // if((sck->fd = socket(info->family, SOCK_RAW|SOCK_NONBLOCK, IPPROTO_RAW)) == -1) // ip_output
+#endif
             goto failed;
+    }
 
     res = TPACKET_V3;
     if(inst->params.tpacket_version == 1)
@@ -395,9 +394,17 @@ failed:
 
 int pm_close(struct pm_socket *sck) {
     int res = 0;
-    if(sck->aso)
-        res = uinet_soclose(sck->aso);
-    if(sck->fd)
+    struct socket* aso;
+    if(sck->aso){
+        aso = (struct socket *)sck->aso;        
+        if(aso->pm_opt){
+            if(aso->pm_opt->user)
+                free(aso->pm_opt->user, M_DEVBUF);
+            free(aso->pm_opt, M_DEVBUF);
+        }
+        res = uinet_soclose(aso);
+    }
+    if(sck->fd != -1)
         close(sck->fd);
     if(sck->tp_wd)
         sck->inst->params.mm_free(sck->tp_wd);
@@ -410,35 +417,114 @@ int pm_close(struct pm_socket *sck) {
 }
 
 int pm_connect(struct pm_socket *sck, struct pm_sockaddr *adr){
-    return uinet_pm_connect(sck->inst, sck->aso, adr);
-}
-
-int uinet_pm_connect(struct pm_instance* inst, struct uinet_socket *aso, struct pm_sockaddr *adr){
+    struct pm_instance* inst = sck->inst;
+    struct uinet_socket *aso = sck->aso;
     int res;
-    struct uinet_pm_so_info info;
+    struct pm_so_info* info;
+    struct inpcb *inp;
+    struct mbuf_pm_opt* pm_opt;
+    struct socket *so;
 
     do{
         adr->sa_len = (adr->sa_family == AF_INET ? sizeof(struct pm_sockaddr_in) : sizeof(struct pm_sockaddr_in6));
 
-        memset(&info, 0, sizeof(struct uinet_pm_so_info));
-        info.local_adr = (adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.local_adr : (struct uinet_sockaddr*)&inst->opt.local_adr6);
-	    info.lport = htons(inst->params.local_port);
-        info.local_mac = (const char*)inst->opt.local_mac;
-        info.gw_mac = (const char*)inst->opt.gw_mac;
-        info.mtu = inst->params.mtu;
-        // info.want_send)(void** buf, size_t n, struct uinet_pm_so_info* arg); // opt, prepare send buf, buf is out send buf
-        // info.do_send)(const void* buf, size_t n, struct uinet_pm_so_info* arg); // opt, call user send
+        inp = sotoinpcb(aso);
+        pm_opt =((struct socket *)aso)->pm_opt;
+        info = (pm_so_info*)(pm_opt->user);
+        // set addr to our addr, because uinet default use vnet route and addr, but our didn't want to use them        
+        pm_opt->local_adr = info.local_adr = (adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.local_adr : (struct uinet_sockaddr*)&inst->opt.local_adr6);
+        inp->inp_lport = info->lport;
+        if(info->local_adr->sa_family == AF_INET)
+            memcpy(&inp->inp_laddr, &((struct sockaddr_in*)info->local_adr)->sin_addr, sizeof(struct in_addr));
+        else
+            memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)info->local_adr)->sin6_addr, sizeof(struct in6_addr));
+	    
+        so = (struct socket *)aso;
 
-        if((res=uinet_so_set_pm_info(aso, &info)))
+        if (so->so_state & SS_ISCONNECTING) {
+            res = EALREADY;
             break;
-        res = uinet_soconnect(aso, (struct uinet_sockaddr*)adr);
+        }
+
+        if ((res = soconnect(so, (struct sockaddr *)adr, curthread))){
+            so->so_state &= ~SS_ISCONNECTING;
+            if (res == ERESTART)
+                res = EINTR;
+            if(!res)
+                res = -1;
+            break;
+        }  
+            
+        if ((so->so_state & SS_NBIO) && (so->so_state & SS_ISCONNECTING)) {
+            res = EINPROGRESS;
+            break;
+        }
     } while(0);
 
     return res;
 }
 
-struct uinet_instance* uinst_instance_get(struct pm_instance* inst) {
-    return inst->uinst;
+int pm_send(struct pm_socket *sck, struct pm_sockaddr *addr, const void *buf, size_t n, int flags) {
+    
+    struct uinet_socket *aso = sck->aso;
+    
+    struct iovec iov[1];
+	struct uio uio_internal;
+	int res;
+
+    iov[0].iov_base = (void*)buf;
+    iov[0].iov_len = n;
+
+	uio_internal.uio_iov = iov;
+	uio_internal.uio_iovcnt = 1;
+	uio_internal.uio_offset = 0;
+	uio_internal.uio_resid = n;
+	uio_internal.uio_segflg = UIO_SYSSPACE;
+	uio_internal.uio_rw = UIO_WRITE;
+	uio_internal.uio_td = curthread;
+
+    if((res = sosend((struct socket *)aso, (struct sockaddr *)addr, &u, NULL, NULL, flags, curthread)) == 0)
+        return n - u.uio_resid;
+    return res > 0 : -res : res;
+}
+
+int pm_recv(struct pm_socket *sck, struct pm_sockaddr *addr, void *buf, size_t n, int *flagsp) {
+    struct uinet_socket *aso = sck->aso;
+	struct iovec iov[1];
+	struct uio uio_internal;
+	int res;
+
+    iov[0].iov_base = buf;
+    iov[0].iov_len = n;
+    
+	uio_internal.uio_iov = iov;
+	uio_internal.uio_iovcnt = 1;
+	uio_internal.uio_offset = 0;
+	uio_internal.uio_resid = n;
+	uio_internal.uio_segflg = UIO_SYSSPACE;
+	uio_internal.uio_rw = UIO_READ;
+	uio_internal.uio_td = curthread;
+	
+    if((res = soreceive((struct socket *)aso, (struct sockaddr **)psa, &uio_internal, NULL, NULL, flagsp)) == 0)
+        return n - uio_internal.uio_resid;
+    return res > 0 : -res : res;
+}
+
+int pm_shutdown(struct pm_socket *sck, int how) {
+	return soshutdown(sck->aso, how);
+}
+
+int pm_getpeeraddr(struct pm_socket *sck, struct pm_sockaddr **sa) {
+	struct socket *so_internal = (struct socket *)so;
+	int rv;
+
+	*sa = NULL;
+
+	CURVNET_SET(so_internal->so_vnet);
+	rv = (*so_internal->so_proto->pr_usrreqs->pru_peeraddr)(so_internal, (struct sockaddr **)sa);
+	CURVNET_RESTORE();
+
+	return (rv);
 }
 
 // int pm_arp_parse_gw_mac(struct pm_instance* inst) {
@@ -470,4 +556,52 @@ int pm_utils_mac_from_s(uint8_t* dst_mac, const char* mac_s){
     dst_mac[4] = (uint8_t)i5;
     dst_mac[5] = (uint8_t)i6;
     return 0;
+}
+
+int uinet_if_transmit(struct ifnet *ifp, struct mbuf *m)
+{
+	int res = ENOBUFS;
+	struct pm_so_info* info;
+	struct inpcb *inp;
+	void* snd_buf = NULL;
+
+	do{
+		if(!m->pm_opt || !(info = m->pm_opt->user))
+			break;
+
+		inp = sotoinpcb((struct socket *)info->uso);
+
+		if(info->want_send && (0 != (*info->want_send)(&snd_buf, m->m_pkthdr.len, info)))
+			break;
+		
+		// @todo: need optimize to zero copy, search: "MGETHDR(m,"
+		m_copydata(m, 0, m->m_pkthdr.len, (caddr_t)snd_buf);
+
+		if(info->do_send && (0 != (*info->do_send)(snd_buf, m->m_pkthdr.len, info)))
+			break;
+
+		res = 0;
+	}while(0);
+	
+	return res;
+}
+
+int uinet_so_parse_rcv(struct uinet_socket *uso, const void* msg, size_t n) {
+	
+	struct socket *so = (struct socket *)uso;
+	struct mbuf_pm_opt* pm_opt = so->pm_opt;
+	struct mbuf *m;
+
+	MGETHDR(m, M_DONTWAIT, MT_DATA);
+
+	m_append(m, n, (c_caddr_t)msg);
+
+	m->pm_opt = pm_opt;
+	m->m_flags |= M_PKTHDR;
+
+	ether_demux(NULL, m);
+
+	// copy from so->so_rcv?
+
+	return 0;
 }

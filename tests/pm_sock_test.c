@@ -1,6 +1,6 @@
 
 #include "../lib/libpm/pm_sock.h"
-#include "../lib/libuinet/api_include/uinet_api.h"
+// #include "../lib/libuinet/api_include/uinet_api.h"
 #include <string.h>
 #include <arpa/inet.h> // inet_pton
 #include <stdio.h> // printf
@@ -127,18 +127,11 @@ int test_pm(int family, struct pm_sockaddr* dst_adr){
 		if((res = pm_init(&inst, &inst_p)) != 0)
 			break;
 
-		if(1){ // SOCK_RAW need root or cap_net_admin?
-			if((res = pm_socreate(inst, &sck, family, SOCK_STREAM, IPPROTO_TCP)) != 0)
-				break;
-			if((res = pm_connect(sck, dst_adr)) != 0)
-				break;
-		}else{ // only for debug
-			uinet_inst = uinst_instance_get(inst);
-			if((res = uinet_socreate(uinet_inst, family, &aso, SOCK_STREAM, IPPROTO_TCP)) != 0) //
-				break;
-			if((res = uinet_pm_connect(inst, aso, dst_adr)) != 0)
-				break;
-		}
+		// PF_PACKET need root or cap_net_admin?
+		if((res = pm_socreate(inst, &sck, family, SOCK_STREAM, IPPROTO_TCP)) != 0)
+			break;
+		if((res = pm_connect(sck, dst_adr)) != 0)
+			break;
 
 	}while(0);
 

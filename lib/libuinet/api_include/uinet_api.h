@@ -259,22 +259,6 @@ void uinet_pd_ref_release(struct uinet_pd_ctx *pdctx[], uint32_t n);
 void uinet_pd_deliver_to_stack(struct uinet_if *uif, struct uinet_pd_list *pkts);
 void uinet_pd_drop(struct uinet_pd_list *pkts);
 
-struct uinet_pm_so_info {
-	struct uinet_socket *uso;
-	struct uinet_sockaddr* local_adr;
-	int lport;
-	const char* local_mac;
-	const char* gw_mac;
-	int mtu;
-	int so_with_lock;
-	int (*want_send)(void** buf, size_t n, struct uinet_pm_so_info* arg); // opt, prepare send buf, buf is out send buf
-	int (*do_send)(const void* buf, size_t n, struct uinet_pm_so_info* arg); // opt, call user send
-};
-
-int uinet_so_set_pm_info(struct uinet_socket *uso, struct uinet_pm_so_info* info);
-
-int uinet_so_parse_rcv(struct uinet_socket *uso, const void* msg, size_t n);
-
 #ifdef __cplusplus
 }
 #endif

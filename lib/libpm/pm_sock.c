@@ -1,5 +1,5 @@
 
-#include "pm_sock.h"
+#include "pm_sock_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,47 +7,28 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <linux/if_packet.h>
-#include <linux/if_ether.h>
 #include <linux/ipv6.h>
 #include <linux/tcp.h>
 #include <net/if.h> // if_nameindex()
 #include <errno.h>
 #include <assert.h>
-#include "../libuinet/api_include/uinet_api.h"
+// #include "../libuinet/api_include/uinet_api.h"
 #include <netdb.h> // NI_MAXHOST
 #include <unistd.h>
 #include <ifaddrs.h>
 #include <sys/socket.h>
 
-struct pm_instance {
-    struct pm_params params;
-    uinet_instance_t uinst;
-    struct {
-        int i_ifindex;
-        struct pm_sockaddr_in local_adr;
-        struct pm_sockaddr_in6 local_adr6;        
-        // struct pm_sockaddr_in gw_adr;
-        // struct pm_sockaddr_in6 gw_adr6;
-        unsigned char local_mac[ETH_ALEN+2];
-        unsigned char gw_mac[ETH_ALEN+2];
-    } opt;
-};
-
-struct pm_socket {
-    struct pm_instance* inst;
-    struct uinet_socket* aso;
-    int fd;
-    
-    unsigned int tp_rblock_num;
-    unsigned int tp_wblock_num;
-    struct iovec* tp_rd;
-    struct iovec* tp_wd;
-    uint8_t* tp_map;
-    size_t tp_map_size;
-};
-
 void pm_log_printf_none(const char *fmt, ...){
-    (void)fmt;
+    int bufLen;
+    char buf[256+1];
+
+    va_list args1;
+    va_start(args1, fmt);
+    buf[256] = 0;
+    bufLen = vsnprintf(buf, 256, fmt, args1);
+    va_end(args1);
+    if(bufLen > 0)
+        print(buf);
 }
 
 int pm_init(struct pm_instance** out, struct pm_params* p) {
@@ -105,9 +86,9 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     }
 
     if(p->local_adr)
-        memcpy(&inst->opt.local_adr, p->local_adr, sizeof(struct pm_sockaddr_in));
+        memmove(&inst->opt.local_adr, p->local_adr, sizeof(struct sockaddr_in));
     if(p->local_adr6)
-        memcpy(&inst->opt.local_adr6, p->local_adr6, sizeof(struct pm_sockaddr_in6));
+        memmove(&inst->opt.local_adr6, p->local_adr6, sizeof(struct sockaddr_in6));
     if(p->local_mac)
         pm_utils_mac_from_s(inst->opt.local_mac, p->local_mac);
         // memcpy(&inst->opt.local_mac, p->local_mac, ETH_ALEN);
@@ -138,31 +119,26 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
         // getnameinfo() result: family:2 172.30.36.220 ifa_flags:0x11043 
         // getnameinfo() result: family:10 fe80::215:5dff:fe0d:f0ab%eth0 ifa_flags:0x11043
         if(!inst->opt.local_adr.sin_len && (family == AF_INET)){
-            memcpy(&inst->opt.local_adr.sin_family, ifa->ifa_addr, sizeof(struct sockaddr_in));
-            inst->opt.local_adr.sin_len = sizeof(struct pm_sockaddr_in);
+            memmove(&inst->opt.local_adr.sin_family, ifa->ifa_addr, sizeof(struct sockaddr_in));
+            inst->opt.local_adr.sin_len = sizeof(struct sockaddr_in);
         }
         if(!inst->opt.local_adr6.sin6_len && (family == AF_INET6)){
-            memcpy(&inst->opt.local_adr6.sin6_family, ifa->ifa_addr, sizeof(struct sockaddr_in6));
-            inst->opt.local_adr6.sin6_len = sizeof(struct pm_sockaddr_in6);
+            memmove(&inst->opt.local_adr6.sin6_family, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+            inst->opt.local_adr6.sin6_len = sizeof(struct sockaddr_in6);
         }
         // if(!inst->opt.gw_adr.sin_len && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET)){
         //     memcpy(&inst->opt.gw_adr.sin_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in));
-        //     inst->opt.gw_adr.sin_len = sizeof(struct pm_sockaddr_in);
+        //     inst->opt.gw_adr.sin_len = sizeof(struct sockaddr_in);
         // }
         // if(!inst->opt.gw_adr6.sin6_len && (IFF_POINTOPOINT & ifa->ifa_flags) && (family == AF_INET6)){
         //     memcpy(&inst->opt.gw_adr6.sin6_family, ifa->ifa_ifu.ifu_dstaddr, sizeof(struct sockaddr_in6));
-        //     inst->opt.gw_adr6.sin6_len = sizeof(struct pm_sockaddr_in6);
+        //     inst->opt.gw_adr6.sin6_len = sizeof(struct sockaddr_in6);
         // }
     }
     freeifaddrs(ifaddr);
 
     if(!p->local_port)
         p->local_port = 984;
-        
-    struct uinet_global_cfg cfg;
-	uinet_default_cfg(&cfg, UINET_GLOBAL_CFG_MEDIUM);
-	uinet_init(&cfg, NULL);
-    inst->uinst = uinet_instance_create(NULL);
 
     if(!p->tp_block_size)
         p->tp_block_size = 40960;
@@ -221,10 +197,8 @@ int pm_init(struct pm_instance** out, struct pm_params* p) {
     res = 0;
 failed:
 
-    if (fd!=-1) {
-        close(fd);
-        fd = -1;
-    }
+    if (fd!=-1)
+        pm_close_fd(fd);
 
     if(res)
         pm_destroy(inst);
@@ -243,28 +217,11 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, struct pm_so_i
     struct ifreq s_ifr;    
     struct tpacket_req3 req;
     struct pm_socket* sck;
-    struct mbuf_pm_opt* pm_opt;
 
     sck = (struct pm_socket*)inst->params.mm_alloc(sizeof(struct pm_socket));
     memset(sck, 0, sizeof(struct pm_socket));
     sck->fd = -1;
     sck->inst = inst;
-    if((res = uinet_socreate(inst->uinst, info->family, &sck->aso, info->type, info->proto)) != 0)
-        goto failed;
-
-    sotoinpcb(sck->aso)->pm_opt = sck->aso->pm_opt = pm_opt = (struct mbuf_pm_opt*)malloc(sizeof(struct mbuf_pm_opt), M_DEVBUF, M_WAITOK);
-    memset(pm_opt, 0, sizeof(struct mbuf_pm_opt));
-
-    pm_opt->user = malloc(sizeof(struct pm_so_info), M_DEVBUF, M_WAITOK);
-    memcpy(pm_opt->user, info, sizeof(struct pm_so_info));
-    info = pm_opt->user;
-
-	info->uso = uso;
-	pm_opt->flags |= mbuf_pm_flags_enabled;
-	if(!info->so_with_lock) {
-		pm_opt->flags |= mbuf_pm_flags_no_lock;
-		so->so_snd.so_non_lock = so->so_rcv.so_non_lock = 1;
-	}
 
 	// check 6 bytes mac is valid
 	if(info->local_mac && (*(const int64_t*)info->local_mac & 0xFFFFFFFFFFFF0000))
@@ -290,10 +247,10 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, struct pm_so_i
 
     // res = setuid(0);
     if((sck->fd = socket(AF_PACKET, SOCK_RAW|SOCK_NONBLOCK, htons(ETH_P_ALL))) == -1) { // ether_output
-#if !defined(NDEBUG) // only for debug
-        if((sck->fd = socket(info->family, SOCK_RAW|SOCK_NONBLOCK, IPPROTO_RAW)) == -1)
+         // only for debug
+        if(!inst->params.debug || (sck->fd = socket(info->family, SOCK_RAW|SOCK_NONBLOCK, IPPROTO_RAW)) == -1)
         // if((sck->fd = socket(info->family, SOCK_RAW|SOCK_NONBLOCK, IPPROTO_RAW)) == -1) // ip_output
-#endif
+
             goto failed;
     }
 
@@ -405,7 +362,7 @@ int pm_close(struct pm_socket *sck) {
         res = uinet_soclose(aso);
     }
     if(sck->fd != -1)
-        close(sck->fd);
+        pm_close_fd(sck->fd);
     if(sck->tp_wd)
         sck->inst->params.mm_free(sck->tp_wd);
     if(sck->tp_rd)
@@ -416,28 +373,28 @@ int pm_close(struct pm_socket *sck) {
     return res;
 }
 
-int pm_connect(struct pm_socket *sck, struct pm_sockaddr *adr){
+int pm_connect(struct pm_socket *sck, struct sockaddr *adr){
     struct pm_instance* inst = sck->inst;
-    struct uinet_socket *aso = sck->aso;
+    // struct uinet_socket *aso = sck->aso;
     int res;
     struct pm_so_info* info;
-    struct inpcb *inp;
-    struct mbuf_pm_opt* pm_opt;
-    struct socket *so;
+    // struct inpcb *inp;
+    // struct mbuf_pm_opt* pm_opt;
+    // struct socket *so;
 
     do{
-        adr->sa_len = (adr->sa_family == AF_INET ? sizeof(struct pm_sockaddr_in) : sizeof(struct pm_sockaddr_in6));
+        adr->sa_len = (adr->sa_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
 
         inp = sotoinpcb(aso);
-        pm_opt =((struct socket *)aso)->pm_opt;
-        info = (pm_so_info*)(pm_opt->user);
+        // pm_opt  ->pm_opt;
+        info = (pm_so_info*)(sck->info);
         // set addr to our addr, because uinet default use vnet route and addr, but our didn't want to use them        
-        pm_opt->local_adr = info.local_adr = (adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.local_adr : (struct uinet_sockaddr*)&inst->opt.local_adr6);
-        inp->inp_lport = info->lport;
-        if(info->local_adr->sa_family == AF_INET)
-            memcpy(&inp->inp_laddr, &((struct sockaddr_in*)info->local_adr)->sin_addr, sizeof(struct in_addr));
-        else
-            memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)info->local_adr)->sin6_addr, sizeof(struct in6_addr));
+        info.local_adr = (adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.local_adr : (struct uinet_sockaddr*)&inst->opt.local_adr6);
+        
+        // if(info->local_adr->sa_family == AF_INET)
+        //     memcpy(&inp->inp_laddr, &((struct sockaddr_in*)info->local_adr)->sin_addr, sizeof(struct in_addr));
+        // else
+        //     memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)info->local_adr)->sin6_addr, sizeof(struct in6_addr));
 	    
         so = (struct socket *)aso;
 
@@ -464,7 +421,7 @@ int pm_connect(struct pm_socket *sck, struct pm_sockaddr *adr){
     return res;
 }
 
-int pm_send(struct pm_socket *sck, struct pm_sockaddr *addr, const void *buf, size_t n, int flags) {
+int pm_send(struct pm_socket *sck, struct sockaddr *addr, const void *buf, size_t n, int flags) {
     
     struct uinet_socket *aso = sck->aso;
     
@@ -488,7 +445,7 @@ int pm_send(struct pm_socket *sck, struct pm_sockaddr *addr, const void *buf, si
     return res > 0 : -res : res;
 }
 
-int pm_recv(struct pm_socket *sck, struct pm_sockaddr *addr, void *buf, size_t n, int *flagsp) {
+int pm_recv(struct pm_socket *sck, struct sockaddr *addr, void *buf, size_t n, int *flagsp) {
     struct uinet_socket *aso = sck->aso;
 	struct iovec iov[1];
 	struct uio uio_internal;
@@ -514,7 +471,7 @@ int pm_shutdown(struct pm_socket *sck, int how) {
 	return soshutdown(sck->aso, how);
 }
 
-int pm_getpeeraddr(struct pm_socket *sck, struct pm_sockaddr **sa) {
+int pm_getpeeraddr(struct pm_socket *sck, struct sockaddr **sa) {
 	struct socket *so_internal = (struct socket *)so;
 	int rv;
 
@@ -525,37 +482,6 @@ int pm_getpeeraddr(struct pm_socket *sck, struct pm_sockaddr **sa) {
 	CURVNET_RESTORE();
 
 	return (rv);
-}
-
-// int pm_arp_parse_gw_mac(struct pm_instance* inst) {
-//     // parse local and gw mac
-//     return -1;
-// }
-
-int pm_utils_get_cmd_result(const char* cmd, char* s, size_t s_len){
-    FILE* fp;
-    if ((fp = popen(cmd, "r")) == NULL)
-        return -1;
-    s[s_len-1] = 0;
-    cmd = fgets(s, s_len-1, fp);
-    pclose(fp);
-    fp = NULL;
-    return cmd ? 0 : -1;
-}
-
-int pm_utils_mac_from_s(uint8_t* dst_mac, const char* mac_s){
-    int i1,i2,i3,i4,i5,i6;
-
-    if(sscanf(mac_s, "%x:%x:%x:%x:%x:%x", &i1, &i2, &i3, &i4, &i5, &i6) != 6)
-        return -1;
-
-    dst_mac[0] = (uint8_t)i1;
-    dst_mac[1] = (uint8_t)i2;
-    dst_mac[2] = (uint8_t)i3;
-    dst_mac[3] = (uint8_t)i4;
-    dst_mac[4] = (uint8_t)i5;
-    dst_mac[5] = (uint8_t)i6;
-    return 0;
 }
 
 int uinet_if_transmit(struct ifnet *ifp, struct mbuf *m)

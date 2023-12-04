@@ -9,7 +9,8 @@ packet_mmap with libuinet(user tcp/ip stack)
 // #include "pm_inc.h"
 #include <stdint.h>
 #include <stddef.h>
-// #include <netinet/in.h>
+#include <sys/socket.h> // sockaddr
+#include <netinet/in.h> // sockaddr_in
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,48 +18,10 @@ extern "C" {
 
 // ** begin uinet internet style. **
 
-typedef	uint8_t		pm_sa_family_t;
-
-typedef uint32_t pm_in_addr_t;
-struct pm_in_addr
-{
-    pm_in_addr_t s_addr;
-};
-
-// Socket address, 
-struct pm_sockaddr_in {
-	uint8_t	sin_len;
-	pm_sa_family_t sin_family;
-	uint16_t	sin_port;
-	struct	pm_in_addr sin_addr;
-	char	sin_zero[8];
-};
-
-struct pm_in6_addr {
-	union {
-		uint8_t		__u6_addr8[16];
-		uint16_t	__u6_addr16[8];
-		uint32_t	__u6_addr32[4];
-	} __u6_addr;			/* 128-bit IP6 address */
-};
-struct pm_sockaddr_in6 {
-	uint8_t		sin6_len;	/* length of this struct */
-	pm_sa_family_t	sin6_family;	/* AF_INET6 */
-	uint16_t	sin6_port;	/* Transport layer port # */
-	uint32_t	sin6_flowinfo;	/* IP6 flow information */
-	struct pm_in6_addr	sin6_addr;	/* IP6 address */
-	uint32_t	sin6_scope_id;	/* scope zone index */
-};
-
-struct pm_sockaddr {
-	unsigned char		sa_len;		/* total length */
-	pm_sa_family_t	    sa_family;	/* address family */
-	char			sa_data[14];	/* actually longer; address value */
-};
-
 // ** end uinet internet style. **
 
 struct pm_params {
+	int debug;
     int tpacket_version; // opt, 1:TPACKET_V1 2:TPACKET_V2 3(or else):TPACKET_V3
     int mtu; // opt, default 1500
     const char* netdev; // opt, eg: "eth0"
@@ -77,8 +40,8 @@ struct pm_params {
 	// const char* local_ip; // opt, 
 	// const char* local_ip6; // opt, 
 	// const char* gateway_mac; // opt, 
-    struct pm_sockaddr_in* local_adr; // opt
-    struct pm_sockaddr_in6* local_adr6; // opt
+    struct sockaddr_in* local_adr; // opt
+    struct sockaddr_in6* local_adr6; // opt
     const char* local_mac; // opt 6 bytes, eg: 01-02-03-04-05-06
     const char* gw_mac; // opt 6 bytes, eg: 01-02-03-04-05-06
 };
@@ -88,13 +51,12 @@ struct pm_so_info {
 	int type;
 	int proto;
 
-	struct uinet_socket *uso;
-	struct uinet_sockaddr* local_adr;
-	int lport;
-	const char* local_mac;
-	const char* gw_mac;
-	int mtu;
-	int so_with_lock;
+	struct sockaddr* local_adr; // opt
+	int lport; // opt
+	const char* local_mac; // opt
+	const char* gw_mac; // opt
+	int mtu; // opt
+	int so_with_lock; // opt
 	int (*want_send)(void** buf, size_t n, struct pm_so_info* arg); // opt, prepare send buf, buf is out send buf
 	int (*do_send)(const void* buf, size_t n, struct pm_so_info* arg); // opt, call user send
 };
@@ -110,9 +72,9 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, struct pm_so_i
 // int pm_accept(struct pm_socket *listener, struct pm_sockaddr **adr, struct pm_socket **aso);
 // int pm_bind(struct pm_socket *sck, struct pm_sockaddr *nam);
 int pm_close(struct pm_socket *sck);
-int pm_connect(struct pm_socket *sck, struct pm_sockaddr *adr);
-int pm_send(struct pm_socket *sck, struct pm_sockaddr *addr, const void *buf, size_t n, int flags);
-int pm_recv(struct pm_socket *sck, struct pm_sockaddr *addr, void *buf, size_t n, int *flagsp);
+int pm_connect(struct pm_socket *sck, struct sockaddr *adr);
+int pm_send(struct pm_socket *sck, struct sockaddr *addr, const void *buf, size_t n, int flags);
+int pm_recv(struct pm_socket *sck, struct sockaddr *addr, void *buf, size_t n, int *flagsp);
 int pm_shutdown(struct pm_socket *sck, int how);
 // parse local and gw mac
 // int pm_arp_parse_gw_mac(struct pm_instance* inst);

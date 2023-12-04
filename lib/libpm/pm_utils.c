@@ -40,3 +40,7 @@ void pm_close_fd(int fd){
     close(fd);
 #endif
 }
+
+const char* pm_err_msg(int e) {
+    return (const char*)strerror(e);
+}

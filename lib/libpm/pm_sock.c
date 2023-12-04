@@ -223,6 +223,9 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, struct pm_so_i
     sck->fd = -1;
     sck->inst = inst;
 
+    memcpy(&sck->info, info, sizeof(struct pm_so_info));
+    info = &sck->info;
+
 	// check 6 bytes mac is valid
 	if(info->local_mac && (*(const int64_t*)info->local_mac & 0xFFFFFFFFFFFF0000))
 		pm_opt->local_mac = info->local_mac;
@@ -250,7 +253,6 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, struct pm_so_i
          // only for debug
         if(!inst->params.debug || (sck->fd = socket(info->family, SOCK_RAW|SOCK_NONBLOCK, IPPROTO_RAW)) == -1)
         // if((sck->fd = socket(info->family, SOCK_RAW|SOCK_NONBLOCK, IPPROTO_RAW)) == -1) // ip_output
-
             goto failed;
     }
 
@@ -340,27 +342,85 @@ int pm_socreate(struct pm_instance* inst, struct pm_socket** out, struct pm_so_i
     *out = sck;
     return 0;
 failed:
-    res = errno;
+    res = pm_err();
     if(!res)
         res = -1;
     if(inst->params.log_printf)
-	    inst->params.log_printf("pm_socreate failed, %d %s", res, strerror(res));
+	    inst->params.log_printf("pm_socreate failed, %d %s", res, pm_err_msg(res));
     pm_close(sck);
     return res;
 }
 
+static int pm_sodisconnect(struct pm_socket *sck)
+{
+	int error;
+
+	if ((so->so_state & PM_SS_ISCONNECTED) == 0)
+		return (ENOTCONN);
+	if (so->so_state & PM_SS_ISDISCONNECTING)
+		return (EALREADY);
+        
+	error = (*so->so_proto->pr_usrreqs->pru_disconnect)(so);
+	return (error);
+}
+
 int pm_close(struct pm_socket *sck) {
     int res = 0;
-    struct socket* aso;
-    if(sck->aso){
-        aso = (struct socket *)sck->aso;        
-        if(aso->pm_opt){
-            if(aso->pm_opt->user)
-                free(aso->pm_opt->user, M_DEVBUF);
-            free(aso->pm_opt, M_DEVBUF);
+    struct pm_socket *sp;
+    do{
+
+        // if (!CURVNET_IS_STS())
+        //     funsetown(&so->so_sigio);
+        do{
+            if (so->so_state & PM_SS_ISCONNECTED) {
+                if ((so->so_state & PM_SS_ISDISCONNECTING) == 0) {
+                    res = pm_sodisconnect(so);
+                    if (res) {
+                        if (res == ENOTCONN)
+                            res = 0;
+                        break;
+                    }
+                }
+                // if (so->so_options & SO_LINGER) {
+                //     if ((so->so_state & PM_SS_ISDISCONNECTING) &&
+                //         (so->so_state & PM_SS_NBIO))
+                //         break;
+                //     while (so->so_state & PM_SS_ISCONNECTED) {
+                //         res = tsleep(&so->so_timeo, PSOCK | PCATCH, "soclos", so->so_linger * hz);
+                //         if (res)
+                //             break;
+                //     }
+                // }
+            }
+        }while (0)        
+
+        if (so->so_proto->pr_usrreqs->pru_close != NULL)
+            (*so->so_proto->pr_usrreqs->pru_close)(so);
+        if (so->so_options & SO_ACCEPTCONN) {            
+            while ((sp = TAILQ_FIRST(&so->so_incomp)) != NULL) {
+                TAILQ_REMOVE(&so->so_incomp, sp, so_list);
+                so->so_incqlen--;
+                sp->so_qstate &= ~SQ_INCOMP;
+                sp->so_head = NULL;
+                soabort(sp);
+            }
+            while ((sp = TAILQ_FIRST(&so->so_comp)) != NULL) {
+                TAILQ_REMOVE(&so->so_comp, sp, so_list);
+                so->so_qlen--;
+                sp->so_qstate &= ~SQ_COMP;
+                sp->so_head = NULL;
+                soabort(sp);
+            }
         }
-        res = uinet_soclose(aso);
-    }
+    #ifdef PASSIVE_INET
+        if (so->so_passive_peer)
+            in_passive_acquire_sock_locks(so);
+        else
+    #endif
+        so->so_state |= PM_SS_NOFDREF;
+        sorele(so);
+    }while(0);
+    
     if(sck->fd != -1)
         pm_close_fd(sck->fd);
     if(sck->tp_wd)
@@ -368,43 +428,58 @@ int pm_close(struct pm_socket *sck) {
     if(sck->tp_rd)
         sck->inst->params.mm_free(sck->tp_rd);
     if(sck->tp_map)
-        munmap(sck->tp_map, sck->tp_map_size);
+        munmap(sck->tp_map, sck->tp_map_size);   
     sck->inst->params.mm_free(sck);
     return res;
 }
 
 int pm_connect(struct pm_socket *sck, struct sockaddr *adr){
     struct pm_instance* inst = sck->inst;
-    // struct uinet_socket *aso = sck->aso;
     int res;
     struct pm_so_info* info;
-    // struct inpcb *inp;
-    // struct mbuf_pm_opt* pm_opt;
-    // struct socket *so;
 
     do{
-        adr->sa_len = (adr->sa_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
-
-        inp = sotoinpcb(aso);
-        // pm_opt  ->pm_opt;
-        info = (pm_so_info*)(sck->info);
+        info = sck->info;
         // set addr to our addr, because uinet default use vnet route and addr, but our didn't want to use them        
-        info.local_adr = (adr->sa_family == AF_INET ? (struct uinet_sockaddr*)&inst->opt.local_adr : (struct uinet_sockaddr*)&inst->opt.local_adr6);
+        info.local_adr = (adr->sa_family == AF_INET ? (struct sockaddr*)&inst->opt.local_adr : (struct sockaddr*)&inst->opt.local_adr6);
         
         // if(info->local_adr->sa_family == AF_INET)
         //     memcpy(&inp->inp_laddr, &((struct sockaddr_in*)info->local_adr)->sin_addr, sizeof(struct in_addr));
         // else
         //     memcpy(&inp->in6p_laddr, &((struct sockaddr_in6*)info->local_adr)->sin6_addr, sizeof(struct in6_addr));
 	    
-        so = (struct socket *)aso;
+        do{
+            if (so->so_state & PM_SS_ISCONNECTING) {
+                res = EALREADY;
+                break;
+            }
 
-        if (so->so_state & SS_ISCONNECTING) {
-            res = EALREADY;
-            break;
-        }
+            if (so->so_options & SO_ACCEPTCONN) {
+                res = EOPNOTSUPP;
+                break;
+            }
+            
+            /*
+            * If protocol is connection-based, can only connect once.
+            * Otherwise, if connected, try to disconnect first.  This allows
+            * user to disconnect by connecting to, e.g., a null address.
+            */
+            if (so->so_state & (PM_SS_ISCONNECTED|PM_SS_ISCONNECTING) &&
+                ((so->so_proto.pr_flags & PM_PR_CONNREQUIRED) ||
+                (res = pm_sodisconnect(so)))) {
+                res = EISCONN;
+                break;
+            }
+            /*
+            * Prevent accumulated error from previous connection from
+            * biting us.
+            */
+            so->so_error = 0;
+            res = (*so->so_proto->pr_usrreqs->pru_connect)(so, nam, td);
+        } while(0);
 
-        if ((res = soconnect(so, (struct sockaddr *)adr, curthread))){
-            so->so_state &= ~SS_ISCONNECTING;
+        if (res){
+            so->so_state &= ~PM_SS_ISCONNECTING;
             if (res == ERESTART)
                 res = EINTR;
             if(!res)
@@ -412,7 +487,7 @@ int pm_connect(struct pm_socket *sck, struct sockaddr *adr){
             break;
         }  
             
-        if ((so->so_state & SS_NBIO) && (so->so_state & SS_ISCONNECTING)) {
+        if ((so->so_state & PM_SS_NBIO) && (so->so_state & PM_SS_ISCONNECTING)) {
             res = EINPROGRESS;
             break;
         }

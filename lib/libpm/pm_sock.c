@@ -351,17 +351,51 @@ failed:
     return res;
 }
 
+static void pm_rip_dodisconnect(struct pm_socket *sck) {
+	so->so_state &= ~(PM_SS_ISCONNECTING|PM_SS_ISCONNECTED|PM_SS_ISDISCONNECTING);
+	so->so_state |= PM_SS_ISDISCONNECTED;
+
+	so->so_rcv.sb_state |= PM_SBS_CANTRCVMORE;
+	so->so_snd.sb_state |= PM_SBS_CANTSENDMORE;
+}
+
 static int pm_sodisconnect(struct pm_socket *sck)
 {
-	int error;
+	int res;
 
 	if ((so->so_state & PM_SS_ISCONNECTED) == 0)
 		return (ENOTCONN);
 	if (so->so_state & PM_SS_ISDISCONNECTING)
 		return (EALREADY);
+
+    pm_rip_dodisconnect(so);
         
-	error = (*so->so_proto->pr_usrreqs->pru_disconnect)(so);
-	return (error);
+	// error = (*so->so_proto->pr_usrreqs->pru_disconnect)(so);
+	return 0;
+}
+
+void pm_soabort(struct pm_socket *so)
+{
+#ifdef PASSIVE_INET
+	struct socket *peer_so = so->so_passive_peer;
+#endif
+
+	if (so->so_proto->pr_usrreqs->pru_abort != NULL)
+		(*so->so_proto->pr_usrreqs->pru_abort)(so);
+	
+#ifdef PASSIVE_INET
+	if (peer_so && !sohasrefs(peer_so) &&
+	    peer_so->so_proto->pr_usrreqs->pru_abort != NULL) {
+		(*peer_so->so_proto->pr_usrreqs->pru_abort)(peer_so);
+	}
+#endif
+
+#ifdef PASSIVE_INET
+	if (so->so_passive_peer)
+		in_passive_acquire_sock_locks(so);
+	else
+#endif
+	sofree(so);
 }
 
 int pm_close(struct pm_socket *sck) {
@@ -394,19 +428,18 @@ int pm_close(struct pm_socket *sck) {
             }
         }while (0)        
 
-        if (so->so_proto->pr_usrreqs->pru_close != NULL)
-            (*so->so_proto->pr_usrreqs->pru_close)(so);
-        if (so->so_options & SO_ACCEPTCONN) {            
-            while ((sp = TAILQ_FIRST(&so->so_incomp)) != NULL) {
-                TAILQ_REMOVE(&so->so_incomp, sp, so_list);
-                so->so_incqlen--;
+        pm_rip_dodisconnect(sck);
+        if (sck->so_options & SO_ACCEPTCONN) {            
+            while ((sp = TAILQ_FIRST(&sck->so_incomp)) != NULL) {
+                TAILQ_REMOVE(&sck->so_incomp, sp, so_list);
+                sck->so_incqlen--;
                 sp->so_qstate &= ~SQ_INCOMP;
                 sp->so_head = NULL;
                 soabort(sp);
             }
-            while ((sp = TAILQ_FIRST(&so->so_comp)) != NULL) {
-                TAILQ_REMOVE(&so->so_comp, sp, so_list);
-                so->so_qlen--;
+            while ((sp = TAILQ_FIRST(&sck->so_comp)) != NULL) {
+                TAILQ_REMOVE(&sck->so_comp, sp, so_list);
+                sck->so_qlen--;
                 sp->so_qstate &= ~SQ_COMP;
                 sp->so_head = NULL;
                 soabort(sp);
